@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using TaskOrganizer.Web.Domain;
 using TaskOrganizer.Web.Services;
 
 namespace TaskOrganizer.Web.Pages;
@@ -28,39 +27,5 @@ public class TimeModel : PageModel
         Summary = await _timeLog.GetWeekAsync(Week ?? _clock.Today);
     }
 
-    public Task<IActionResult> OnPostAddAsync(DateOnly date, TimeOnly start, TimeOnly? end)
-    {
-        return RunAsync(() => _timeLog.AddEntryAsync(date, start, end));
-    }
-
-    public Task<IActionResult> OnPostUpdateAsync(int id, TimeOnly start, TimeOnly? end)
-    {
-        return RunAsync(() => _timeLog.UpdateEntryAsync(id, start, end));
-    }
-
-    public Task<IActionResult> OnPostDeleteAsync(int id)
-    {
-        return RunAsync(() => _timeLog.DeleteEntryAsync(id));
-    }
-
-    private async Task<IActionResult> RunAsync(Func<Task> action)
-    {
-        if (!ModelState.IsValid)
-        {
-            TempData["Error"] = "Nothing was saved. Enter times as HH:MM.";
-        }
-        else
-        {
-            try
-            {
-                await action();
-            }
-            catch (DomainRuleException ex)
-            {
-                TempData["Error"] = ex.Message;
-            }
-        }
-
-        return RedirectToPage(new { week = Week?.ToString("yyyy-MM-dd") });
-    }
+    public DayTimeEntriesModel Entries(DayLog day) => new(day, Today, Request.CurrentUrl());
 }

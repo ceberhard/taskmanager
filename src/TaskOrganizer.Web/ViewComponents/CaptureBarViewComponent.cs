@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using TaskOrganizer.Web.Domain;
+using TaskOrganizer.Web.Pages;
 using TaskOrganizer.Web.Services;
 
 namespace TaskOrganizer.Web.ViewComponents;
 
-public record CaptureBarModel(IReadOnlyList<Project> Projects, ClockStatus Clock, string ReturnUrl, bool FocusQuickAdd);
+public record CaptureBarModel(IReadOnlyList<Project> Projects, ClockStatus Clock, string ReturnUrl, bool FocusQuickAdd, QuickAddDraft? Draft);
 
 /// <summary>The strip on every page: quick-add, the interruption button and the clock.</summary>
 public class CaptureBarViewComponent : ViewComponent
@@ -22,7 +23,9 @@ public class CaptureBarViewComponent : ViewComponent
     {
         List<Project> projects = await _projects.ListAsync();
         ClockStatus clock = await _timeLog.GetClockStatusAsync();
-        string returnUrl = HttpContext.Request.Path + HttpContext.Request.QueryString;
-        return View(new CaptureBarModel(projects, clock, returnUrl, focusQuickAdd));
+        QuickAddDraft? draft = QuickAddDraft.Load(TempData);
+
+        // A rejected quick-add puts the cursor back in the box, whichever page it was sent from.
+        return View(new CaptureBarModel(projects, clock, HttpContext.Request.CurrentUrl(), focusQuickAdd || draft is not null, draft));
     }
 }

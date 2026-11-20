@@ -52,6 +52,7 @@ public sealed class TestHost : IDisposable
         Tasks = new TaskService(Db, Clock, Settings);
         TimeLog = new TimeLogService(Db, Clock, Settings);
         Importer = new PunchdownImporter(Db, Clock);
+        TimeImporter = new TimeLogImporter(Db, TimeLog);
     }
 
     public FakeTimeProvider Time { get; }
@@ -62,6 +63,7 @@ public sealed class TestHost : IDisposable
     public TaskService Tasks { get; }
     public TimeLogService TimeLog { get; }
     public PunchdownImporter Importer { get; }
+    public TimeLogImporter TimeImporter { get; }
 
     /// <summary>A second context on the same database, to read what was actually saved.</summary>
     public AppDbContext NewContext()

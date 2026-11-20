@@ -3,7 +3,6 @@
 @{
     ViewData["Title"] = "Time";
     WeekSummary week = Model.Summary;
-    string weekValue = Display.DateInput(week.WeekStart);
 }
 
 <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-2">
@@ -24,30 +23,7 @@
                     <h2 class="h6 mb-1">@day.Date.ToString("dddd d MMM")</h2>
                     <span class="fw-semibold">@Display.Hours(day.TotalHours)</span>
                 </div>
-                @foreach (TimeEntry entry in day.Entries)
-                {
-                    <form method="post" class="d-flex flex-wrap gap-2 align-items-center mb-1">
-                        <input type="hidden" name="id" value="@entry.Id" />
-                        <input type="hidden" name="week" value="@weekValue" />
-                        <input type="time" name="start" value="@Display.TimeInput(entry.StartTime)" class="form-control form-control-sm time-input" required aria-label="Start" />
-                        <span>to</span>
-                        <input type="time" name="end" value="@Display.TimeInput(entry.EndTime)" class="form-control form-control-sm time-input" aria-label="End" />
-                        @if (entry.EndTime is null)
-                        {
-                            <span class="small @(day.Date == Model.Today ? "text-success" : "text-danger")">@(day.Date == Model.Today ? "running" : "open: set an end time")</span>
-                        }
-                        <button type="submit" asp-page-handler="Update" class="btn btn-sm btn-outline-primary">Save</button>
-                        <button type="submit" asp-page-handler="Delete" class="btn btn-sm btn-outline-danger" formnovalidate>Delete</button>
-                    </form>
-                }
-                <form method="post" asp-page-handler="Add" class="d-flex flex-wrap gap-2 align-items-center">
-                    <input type="hidden" name="date" value="@Display.DateInput(day.Date)" />
-                    <input type="hidden" name="week" value="@weekValue" />
-                    <input type="time" name="start" class="form-control form-control-sm time-input" required aria-label="Start" />
-                    <span>to</span>
-                    <input type="time" name="end" class="form-control form-control-sm time-input" aria-label="End" />
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">Add</button>
-                </form>
+                <partial name="_DayTimeEntries" model="Model.Entries(day)" />
             </section>
         }
     </div>

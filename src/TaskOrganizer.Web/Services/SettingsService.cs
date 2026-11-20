@@ -18,6 +18,13 @@ public class SettingsService
         return await _db.Settings.SingleAsync(s => s.Id == AppSettings.SingletonId);
     }
 
+    public async Task SetOpeningRolloverAsync(double openingRolloverHours)
+    {
+        AppSettings settings = await GetAsync();
+        settings.OpeningRolloverHours = openingRolloverHours;
+        await _db.SaveChangesAsync();
+    }
+
     public async Task UpdateAsync(double weeklyGoalHours, double openingRolloverHours, DateOnly? rolloverStartDate, double dailyPlanTargetHours)
     {
         if (weeklyGoalHours <= 0 || weeklyGoalHours > 168)

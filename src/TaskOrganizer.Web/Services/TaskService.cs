@@ -58,6 +58,54 @@ public class TaskService
         await _db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Mass edit: sets priority, expected delivery date and size on many tasks in one save.
+    /// Every row is checked first; if any is invalid nothing is saved and the message names the task.
+    /// Returns how many tasks actually changed.
+    /// </summary>
+    public async Task<int> UpdatePlanningAsync(IReadOnlyList<TaskPlanningEdit> edits)
+    {
+        List<int> ids = edits.Select(e => e.Id).ToList();
+        Dictionary<int, WorkTask> tasks = await _db.Tasks.Where(t => ids.Contains(t.Id)).ToDictionaryAsync(t => t.Id);
+
+        List<string> problems = new();
+        foreach (TaskPlanningEdit edit in edits)
+        {
+            if (!tasks.TryGetValue(edit.Id, out WorkTask? task))
+            {
+                problems.Add($"Task {edit.Id} no longer exists.");
+                continue;
+            }
+
+            string? problem = PlanningProblem(edit.Priority, edit.EstimateHours);
+            if (problem is not null)
+            {
+                problems.Add($"\"{Shorten(task.Title)}\": {problem}");
+            }
+        }
+
+        if (problems.Count > 0)
+        {
+            throw new DomainRuleException("Nothing was saved. " + string.Join(" ", problems));
+        }
+
+        int changed = 0;
+        DateTime now = _clock.UtcNow;
+        foreach (TaskPlanningEdit edit in edits)
+        {
+            WorkTask task = tasks[edit.Id];
+            bool differs = task.Priority != edit.Priority || task.DueDate != edit.DueDate || task.EstimateHours != edit.EstimateHours;
+            if (differs)
+            {
+                ApplyPlanning(task, edit.Priority, edit.DueDate, edit.EstimateHours, now);
+                changed++;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return changed;
+    }
+
     public Task StartAsync(int id) => ChangeStatusAsync(id, WorkTaskStatus.InProgress);
 
     public Task PauseAsync(int id) => ChangeStatusAsync(id, WorkTaskStatus.ToDo);
@@ -120,16 +168,18 @@ public class TaskService
             settings.DailyPlanTargetHours);
     }
 
-    public async Task<BacklogView> GetBacklogAsync()
+    public async Task<BacklogView> GetBacklogAsync(BacklogFilter? filter = null)
     {
+        BacklogFilter effectiveFilter = filter ?? BacklogFilter.None;
         List<WorkTask> openTasks = await _db.Tasks
             .Include(t => t.Project)
             .Where(t => t.Status == WorkTaskStatus.ToDo || t.Status == WorkTaskStatus.InProgress)
             .ToListAsync();
         List<Project> projects = await _db.Projects.OrderBy(p => p.SortOrder).ThenBy(p => p.Name).ToListAsync();
+        List<WorkTask> shownTasks = openTasks.Where(effectiveFilter.Matches).ToList();
 
         List<ProjectBacklog> groups = new();
-        List<WorkTask> unfiled = SortForWork(openTasks.Where(t => t.ProjectId is null));
+        List<WorkTask> unfiled = SortForWork(shownTasks.Where(t => t.ProjectId is null));
         if (unfiled.Count > 0)
         {
             groups.Add(new ProjectBacklog(null, unfiled, PriorityCounts.From(unfiled)));
@@ -137,11 +187,24 @@ public class TaskService
 
         foreach (Project project in projects)
         {
-            List<WorkTask> projectTasks = SortForWork(openTasks.Where(t => t.ProjectId == project.Id));
-            groups.Add(new ProjectBacklog(project, projectTasks, PriorityCounts.From(projectTasks)));
+            List<WorkTask> projectTasks = SortForWork(shownTasks.Where(t => t.ProjectId == project.Id));
+
+            // Unfiltered, an empty project is still listed so it can be seen and filled.
+            // With a filter on, a project with nothing to show would only be noise.
+            if (projectTasks.Count > 0 || !effectiveFilter.IsActive)
+            {
+                groups.Add(new ProjectBacklog(project, projectTasks, PriorityCounts.From(projectTasks)));
+            }
         }
 
-        return new BacklogView(groups, PriorityCounts.From(openTasks));
+        // The priority surface ignores the filter: it exists to show the whole picture.
+        List<ProjectPriorityCounts> surface = openTasks
+            .GroupBy(t => t.ProjectId)
+            .Select(g => new ProjectPriorityCounts(projects.FirstOrDefault(p => p.Id == g.Key), PriorityCounts.From(g)))
+            .OrderBy(row => row.Project is null ? int.MinValue : row.Project.SortOrder)
+            .ToList();
+
+        return new BacklogView(groups, PriorityCounts.From(openTasks), surface, effectiveFilter.IsActive);
     }
 
     public async Task<List<WorkTask>> GetRecentlyClosedAsync(int days)
@@ -202,31 +265,40 @@ public class TaskService
             throw new DomainRuleException("Task title must be 1000 characters or fewer.");
         }
 
-        if (!Enum.IsDefined(details.Priority))
+        string? planningProblem = PlanningProblem(details.Priority, details.EstimateHours);
+        if (planningProblem is not null)
         {
-            throw new DomainRuleException("Unknown priority.");
+            throw new DomainRuleException(planningProblem);
         }
-
-        ValidateEstimate(details.EstimateHours);
 
         if (details.ProjectId is int projectId && !await _db.Projects.AnyAsync(p => p.Id == projectId))
         {
             throw new DomainRuleException("Project not found.");
         }
 
-        if (recordChanges)
-        {
-            DateTime now = _clock.UtcNow;
-            RecordChange(task, TaskField.EstimateHours, FormatHours(task.EstimateHours), FormatHours(details.EstimateHours), now);
-            RecordChange(task, TaskField.Priority, task.Priority.ToString(), details.Priority.ToString(), now);
-        }
-
         task.Title = title;
         task.ProjectId = details.ProjectId;
-        task.Priority = details.Priority;
-        task.DueDate = details.DueDate;
-        task.EstimateHours = details.EstimateHours;
+        ApplyPlanning(task, details.Priority, details.DueDate, details.EstimateHours, recordChanges ? _clock.UtcNow : null);
     }
+
+    /// <summary>
+    /// Sets the three planning fields. Shared by single edit and mass edit so both leave the
+    /// same history. A null changedAtUtc means the task is being created and has no history yet.
+    /// </summary>
+    private void ApplyPlanning(WorkTask task, TaskPriority priority, DateOnly? dueDate, double? estimateHours, DateTime? changedAtUtc)
+    {
+        if (changedAtUtc is DateTime at)
+        {
+            RecordChange(task, TaskField.EstimateHours, FormatHours(task.EstimateHours), FormatHours(estimateHours), at);
+            RecordChange(task, TaskField.Priority, task.Priority.ToString(), priority.ToString(), at);
+        }
+
+        task.Priority = priority;
+        task.DueDate = dueDate;
+        task.EstimateHours = estimateHours;
+    }
+
+    private static string Shorten(string title) => title.Length <= 60 ? title : title[..57] + "...";
 
     private void SetPlannedFor(WorkTask task, DateOnly? plannedFor)
     {
@@ -256,19 +328,27 @@ public class TaskService
 
     private static string? FormatDate(DateOnly? date) => date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    private static void ValidateEstimate(double? estimateHours)
+    /// <summary>Returns what is wrong with a priority and size, or null when both are acceptable.</summary>
+    private static string? PlanningProblem(TaskPriority priority, double? estimateHours)
     {
+        if (!Enum.IsDefined(priority))
+        {
+            return "Unknown priority.";
+        }
+
         if (estimateHours is not double hours)
         {
-            return;
+            return null;
         }
 
         double steps = hours / EstimateStepHours;
         bool isWholeSteps = Math.Abs(steps - Math.Round(steps)) < 1e-9;
         if (hours < EstimateStepHours || !isWholeSteps)
         {
-            throw new DomainRuleException("Size is in hours, in 15-minute steps, with a minimum of 0.25.");
+            return "Size is in hours, in 15-minute steps, with a minimum of 0.25.";
         }
+
+        return null;
     }
 
     private async Task<WorkTask> FindAsync(int id)

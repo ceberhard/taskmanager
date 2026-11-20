@@ -1,0 +1,14 @@
+# Store text files with LF in the repository, whatever line endings they have on disk.
+# Without this, Git on Windows (core.autocrlf=true) and Git in WSL (unset) disagree,
+# and files saved with CRLF show up as modified in WSL even when nothing changed.
+* text=auto
+
+# Never treat these as text.
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.gif   binary
+*.woff  binary
+*.woff2 binary
+*.xlsx  binary
+*.db    binary

@@ -25,6 +25,31 @@
     <div class="progress-bar @(today.IsOverTarget ? "bg-danger" : "")" style="width: @((int)percent)%"></div>
 </div>
 
+<section class="card mb-4" id="today-time">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h2 class="h6 mb-0">Time today: @Display.Hours(Model.TodayLog.TotalHours)</h2>
+            <span class="small text-muted">Week @Display.Hours(Model.Week.WeeklyTotalHours) of @Display.Hours(Model.Week.WeeklyGoalHours) · <a asp-page="/Time">full week</a></span>
+            <form method="post">
+                <input type="hidden" name="returnUrl" value="@Model.TimeEntries.ReturnUrl" />
+                @if (Model.Clock.RunningEntry is not null)
+                {
+                    <button type="submit" asp-page="/Actions" asp-page-handler="ClockOut" class="btn btn-sm btn-secondary">Stop (running since @Display.TimeInput(Model.Clock.RunningEntry.StartTime))</button>
+                }
+                else if (Model.Clock.StaleOpenEntry is not null)
+                {
+                    <a asp-page="/Time" asp-route-week="@Display.DateInput(Model.Clock.StaleOpenEntry.Date)" class="small text-danger">Open entry from @Model.Clock.StaleOpenEntry.Date.ToString("ddd d MMM") needs an end time</a>
+                }
+                else
+                {
+                    <button type="submit" asp-page="/Actions" asp-page-handler="ClockIn" class="btn btn-sm btn-success">Start</button>
+                }
+            </form>
+        </div>
+        <partial name="_DayTimeEntries" model="Model.TimeEntries" />
+    </div>
+</section>
+
 @if (today.CarriedOver.Count > 0)
 {
     <section class="mb-4">

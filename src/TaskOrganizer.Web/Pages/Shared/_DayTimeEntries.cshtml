@@ -1,0 +1,25 @@
+@model DayTimeEntriesModel
+@foreach (TimeEntry entry in Model.Day.Entries)
+{
+    <form method="post" class="d-flex flex-wrap gap-2 align-items-center mb-1">
+        <input type="hidden" name="id" value="@entry.Id" />
+        <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+        <input type="time" name="start" value="@Display.TimeInput(entry.StartTime)" class="form-control form-control-sm time-input" required aria-label="Start" />
+        <span>to</span>
+        <input type="time" name="end" value="@Display.TimeInput(entry.EndTime)" class="form-control form-control-sm time-input" aria-label="End" />
+        @if (entry.EndTime is null)
+        {
+            <span class="small @(Model.IsToday ? "text-success" : "text-danger")">@(Model.IsToday ? "running" : "open: set an end time")</span>
+        }
+        <button type="submit" asp-page="/Actions" asp-page-handler="TimeUpdate" class="btn btn-sm btn-outline-primary">Save</button>
+        <button type="submit" asp-page="/Actions" asp-page-handler="TimeDelete" class="btn btn-sm btn-outline-danger" formnovalidate>Delete</button>
+    </form>
+}
+<form method="post" asp-page="/Actions" asp-page-handler="TimeAdd" class="d-flex flex-wrap gap-2 align-items-center">
+    <input type="hidden" name="date" value="@Display.DateInput(Model.Day.Date)" />
+    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+    <input type="time" name="start" class="form-control form-control-sm time-input" required aria-label="Start" />
+    <span>to</span>
+    <input type="time" name="end" class="form-control form-control-sm time-input" aria-label="End" />
+    <button type="submit" class="btn btn-sm btn-outline-secondary">Log time</button>
+</form>

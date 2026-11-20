@@ -55,7 +55,23 @@
         Reads the "@PunchdownImporter.SheetName" sheet of <code>@Model.WorkbookPath</code>. The workbook is only read, never changed.
         Running it again adds only rows that were not imported before.
     </p>
-    <form method="post" asp-page-handler="Import">
-        <button type="submit" class="btn btn-outline-primary">Import punch-down list</button>
-    </form>
+    <div class="d-flex flex-wrap gap-2">
+        <form method="post" asp-page-handler="Import">
+            <button type="submit" class="btn btn-outline-primary">Import punch-down list</button>
+        </form>
+        <form method="post" asp-page-handler="ImportTime">
+            <button type="submit" class="btn btn-outline-primary">Import time log</button>
+        </form>
+    </div>
+    <p class="small text-muted mt-2 mb-0">
+        The time import reads the start and end times from the "@TimeLogImporter.SheetName" sheet. Rows with no end time, and rows in the undated weekend block, are skipped and listed.
+    </p>
+    @if (Model.OfferedRolloverHours is double offered)
+    {
+        <form method="post" asp-page-handler="ApplyRollover" class="alert alert-info d-flex flex-wrap gap-2 align-items-center mt-2 mb-0">
+            <input type="hidden" name="hours" value="@offered.ToString("R", System.Globalization.CultureInfo.InvariantCulture)" />
+            <span>The sheet's Rollover is @Display.SignedHours(offered). Your opening rollover balance is @Display.SignedHours(Model.Current.OpeningRolloverHours).</span>
+            <button type="submit" class="btn btn-sm btn-primary">Set opening balance to @Display.SignedHours(offered)</button>
+        </form>
+    }
 </section>

@@ -2,16 +2,29 @@
 @model BacklogModel
 @{
     ViewData["Title"] = "Backlog";
-    ViewData["FocusQuickAdd"] = true;
+    ViewData["FocusQuickAdd"] = !Model.Edit;
     BacklogView backlog = Model.Backlog;
+    int rowIndex = 0;
 }
 
-<h1 class="h3">Backlog <small class="text-muted">@backlog.Overall.Total open</small></h1>
+<h1 class="h3">
+    Backlog
+    <small class="text-muted">
+        @if (backlog.IsFiltered)
+        {
+            <span>showing @backlog.ShownCount of @backlog.Overall.Total open</span>
+        }
+        else
+        {
+            <span>@backlog.Overall.Total open</span>
+        }
+    </small>
+</h1>
 
-<section class="mb-4">
-    <h2 class="h6 text-muted">Open tasks by priority</h2>
+<section class="mb-3">
+    <h2 class="h6 text-muted">Open tasks by priority (all projects, unfiltered)</h2>
     <div class="table-responsive">
-        <table class="table table-sm align-middle w-auto">
+        <table class="table table-sm align-middle w-auto mb-0">
             <thead>
                 <tr>
                     <th></th>
@@ -33,16 +46,16 @@
                     <td class="text-end">@backlog.Overall.Total</td>
                     <td><partial name="_PriorityBar" model="backlog.Overall" /></td>
                 </tr>
-                @foreach (ProjectBacklog group in backlog.Groups.Where(g => g.Tasks.Count > 0))
+                @foreach (ProjectPriorityCounts row in backlog.Surface)
                 {
                     <tr>
-                        <td><a href="#project-@(group.Project?.Id ?? 0)">@group.Name</a></td>
+                        <td>@row.Name</td>
                         @foreach (TaskPriority priority in Display.Priorities)
                         {
-                            <td class="text-end">@group.Counts.For(priority)</td>
+                            <td class="text-end">@row.Counts.For(priority)</td>
                         }
-                        <td class="text-end">@group.Counts.Total</td>
-                        <td><partial name="_PriorityBar" model="group.Counts" /></td>
+                        <td class="text-end">@row.Counts.Total</td>
+                        <td><partial name="_PriorityBar" model="row.Counts" /></td>
                     </tr>
                 }
             </tbody>
@@ -50,29 +63,141 @@
     </div>
 </section>
 
-@foreach (ProjectBacklog group in backlog.Groups)
-{
-    <section class="mb-4" id="project-@(group.Project?.Id ?? 0)">
-        <h2 class="h5">@group.Name <small class="text-muted">@group.Tasks.Count</small></h2>
-        @if (group.Tasks.Count == 0)
+<form method="get" class="border rounded p-2 mb-3" id="backlog-filter">
+    @if (Model.Edit)
+    {
+        <input type="hidden" name="Edit" value="true" />
+    }
+    <div class="d-flex flex-wrap gap-3 align-items-center mb-1">
+        <strong class="small">Projects</strong>
+        <label class="small"><input type="checkbox" name="Project" value="@BacklogFilter.UnfiledProjectId" class="form-check-input" checked="@Model.Project.Contains(BacklogFilter.UnfiledProjectId)" /> Unfiled</label>
+        @foreach (Project project in Model.Projects)
         {
-            <p class="text-muted small">No open tasks.</p>
+            <label class="small"><input type="checkbox" name="Project" value="@project.Id" class="form-check-input" checked="@Model.Project.Contains(project.Id)" /> @project.Name</label>
         }
-        <ul class="task-list">
-            @foreach (WorkTask task in group.Tasks)
-            {
-                <partial name="_TaskRow" model="Model.Row(task, false)" />
-            }
-        </ul>
-    </section>
+    </div>
+    <div class="d-flex flex-wrap gap-3 align-items-center">
+        <strong class="small">Priorities</strong>
+        @foreach (TaskPriority priority in Display.Priorities)
+        {
+            <label class="small"><input type="checkbox" name="Priority" value="@priority" class="form-check-input" checked="@Model.Priority.Contains(priority)" /> @Display.Priority(priority)</label>
+        }
+        <button type="submit" class="btn btn-sm btn-primary">Apply filter</button>
+        @if (backlog.IsFiltered)
+        {
+            <a class="btn btn-sm btn-outline-secondary" href="@(Model.Edit ? "?Edit=true" : "?")">Show everything</a>
+        }
+        <span class="small text-muted">Nothing ticked in a row means all.</span>
+    </div>
+</form>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-collapse-all="true">Collapse all</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-collapse-all="false">Expand all</button>
+    @if (Model.Edit)
+    {
+        <a class="btn btn-sm btn-outline-secondary" href="@Model.ViewUrl(edit: false)">Leave edit mode without saving</a>
+    }
+    else
+    {
+        <a class="btn btn-sm btn-outline-primary" href="@Model.ViewUrl(edit: true)">Edit priorities, dates and hours</a>
+    }
+</div>
+
+@if (backlog.IsFiltered && backlog.ShownCount == 0)
+{
+    <p class="text-muted">No open tasks match this filter.</p>
 }
 
-<details class="mb-4">
-    <summary class="h6">Closed in the last @Model.ClosedWindowDays days (@Model.RecentlyClosed.Count)</summary>
-    <ul class="task-list">
-        @foreach (WorkTask task in Model.RecentlyClosed)
+@if (Model.Edit)
+{
+    <form method="post" asp-page-handler="SaveAll" id="mass-edit">
+        @* Carry the filter through the save so the page comes back to the same slice. *@
+        @foreach (int projectId in Model.Project)
         {
-            <partial name="_TaskRow" model="Model.Row(task, true)" />
+            <input type="hidden" name="Project" value="@projectId" />
         }
-    </ul>
-</details>
+        @foreach (TaskPriority priority in Model.Priority)
+        {
+            <input type="hidden" name="Priority" value="@priority" />
+        }
+        <div class="sticky-top bg-white border-bottom py-2 mb-2 d-flex gap-2 align-items-center">
+            <button type="submit" class="btn btn-sm btn-primary">Save all changes</button>
+            <span class="small text-muted">Change any rows, then save once. Ctrl+Up / Ctrl+Down moves to the same field in the next row.</span>
+        </div>
+        @foreach (ProjectBacklog group in backlog.Groups)
+        {
+            <details class="project-group mb-3" data-project="@(group.Project?.Id ?? BacklogFilter.UnfiledProjectId)" open>
+                <summary class="h5">@group.Name <small class="text-muted">@group.Tasks.Count</small></summary>
+                <table class="table table-sm align-middle">
+                    <tbody>
+                        @foreach (WorkTask task in group.Tasks)
+                        {
+                            PlanningRowRequest row = Model.EditRow(task);
+                            <tr>
+                                <td class="task-title">
+                                    <input type="hidden" name="rows[@rowIndex].Id" value="@task.Id" />
+                                    <input type="hidden" name="rows[@rowIndex].OriginalPriority" value="@row.OriginalPriority" />
+                                    <input type="hidden" name="rows[@rowIndex].OriginalDueDate" value="@Display.DateInput(row.OriginalDueDate)" />
+                                    <input type="hidden" name="rows[@rowIndex].OriginalEstimateHours" value="@Display.NumberInput(row.OriginalEstimateHours)" />
+                                    @task.Title
+                                </td>
+                                <td class="edit-cell">
+                                    <select name="rows[@rowIndex].Priority" class="form-select form-select-sm" data-col="priority" aria-label="Priority">
+                                        @foreach (TaskPriority priority in Display.Priorities)
+                                        {
+                                            <option value="@priority" selected="@(priority == row.Priority)">@Display.Priority(priority)</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="edit-cell">
+                                    <input type="date" name="rows[@rowIndex].DueDate" value="@Display.DateInput(row.DueDate)" class="form-control form-control-sm" data-col="due" aria-label="Expected delivery date" />
+                                </td>
+                                <td class="edit-cell-narrow">
+                                    <input type="number" name="rows[@rowIndex].EstimateHours" value="@Display.NumberInput(row.EstimateHours)" min="0.25" step="0.25" placeholder="hrs" class="form-control form-control-sm" data-col="hours" aria-label="Rough size in hours" />
+                                </td>
+                            </tr>
+                            rowIndex++;
+                        }
+                    </tbody>
+                </table>
+            </details>
+        }
+        <button type="submit" class="btn btn-primary mb-4">Save all changes</button>
+    </form>
+}
+else
+{
+    @foreach (ProjectBacklog group in backlog.Groups)
+    {
+        <details class="project-group mb-3" data-project="@(group.Project?.Id ?? BacklogFilter.UnfiledProjectId)" open>
+            <summary class="h5">
+                @group.Name <small class="text-muted">@group.Tasks.Count</small>
+            </summary>
+            @if (group.Tasks.Count == 0)
+            {
+                <p class="text-muted small">No open tasks.</p>
+            }
+            <ul class="task-list">
+                @foreach (WorkTask task in group.Tasks)
+                {
+                    <partial name="_TaskRow" model="Model.Row(task, false)" />
+                }
+            </ul>
+        </details>
+    }
+
+    <details class="mb-4">
+        <summary class="h6">Closed in the last @Model.ClosedWindowDays days (@Model.RecentlyClosed.Count)</summary>
+        <ul class="task-list">
+            @foreach (WorkTask task in Model.RecentlyClosed)
+            {
+                <partial name="_TaskRow" model="Model.Row(task, true)" />
+            }
+        </ul>
+    </details>
+}
+
+@section Scripts {
+    <script src="~/js/backlog.js" asp-append-version="true"></script>
+}

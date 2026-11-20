@@ -1,31 +1,40 @@
 @using TaskOrganizer.Web.Domain
 @using TaskOrganizer.Web.Pages
 @model TaskOrganizer.Web.ViewComponents.CaptureBarModel
+@{
+    QuickAddDraft? draft = Model.Draft;
+    string selectedPriority = draft?.Priority ?? TaskPriority.Medium.ToString();
+}
 
 <div class="capture-bar border-bottom bg-light py-2 mb-3">
     <div class="container d-flex flex-wrap gap-2 align-items-center">
         <form method="post" asp-page="/Actions" asp-page-handler="Add" class="d-flex flex-wrap gap-2 flex-grow-1 align-items-center">
             <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
-            <input id="quick-title" name="title" class="form-control form-control-sm quick-title" required maxlength="1000"
+            <input id="quick-title" name="title" value="@draft?.Title" class="form-control form-control-sm quick-title @(draft is null ? "" : "is-invalid")" required maxlength="1000"
+                   aria-describedby="@(draft is null ? null : "quick-add-error")"
                    placeholder="Add a task and press Enter  (press / to jump here)" autocomplete="off" aria-label="Task title"
                    autofocus="@(Model.FocusQuickAdd ? "autofocus" : null)" />
             <select name="projectId" class="form-select form-select-sm w-auto" aria-label="Project">
                 <option value="">Unfiled</option>
                 @foreach (Project project in Model.Projects)
                 {
-                    <option value="@project.Id">@project.Name</option>
+                    <option value="@project.Id" selected="@(draft?.ProjectId == project.Id.ToString())">@project.Name</option>
                 }
             </select>
             <select name="priority" class="form-select form-select-sm w-auto" aria-label="Priority">
                 @foreach (TaskPriority priority in Display.Priorities)
                 {
-                    <option value="@priority" selected="@(priority == TaskPriority.Medium)">@Display.Priority(priority)</option>
+                    <option value="@priority" selected="@(priority.ToString() == selectedPriority)">@Display.Priority(priority)</option>
                 }
             </select>
-            <input type="date" name="dueDate" class="form-control form-control-sm w-auto" aria-label="Expected delivery date" title="Expected delivery date" />
-            <input type="number" name="estimateHours" class="form-control form-control-sm hours-input" min="0.25" step="0.25" placeholder="hrs" aria-label="Rough size in hours" title="Rough size in hours" />
-            <label class="form-check-label small text-nowrap"><input type="checkbox" name="planForToday" value="true" class="form-check-input" /> today</label>
+            <input type="date" name="dueDate" value="@draft?.DueDate" class="form-control form-control-sm w-auto" aria-label="Expected delivery date" title="Expected delivery date" />
+            <input type="number" name="estimateHours" value="@draft?.EstimateHours" class="form-control form-control-sm hours-input" min="0.25" step="0.25" placeholder="hrs" aria-label="Rough size in hours" title="Rough size in hours" />
+            <label class="form-check-label small text-nowrap"><input type="checkbox" name="planForToday" value="true" class="form-check-input" checked="@(draft?.PlanForToday == true)" /> today</label>
             <button type="submit" class="btn btn-sm btn-primary">Add</button>
+            @if (draft is not null)
+            {
+                <div id="quick-add-error" class="w-100 text-danger small fw-semibold" role="alert">Not added: @draft.Error</div>
+            }
         </form>
 
         <form method="post" asp-page="/Actions" asp-page-handler="Interrupt">

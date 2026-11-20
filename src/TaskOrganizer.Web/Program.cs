@@ -20,6 +20,7 @@ builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<TimeLogService>();
 builder.Services.AddScoped<PunchdownImporter>();
+builder.Services.AddScoped<TimeLogImporter>();
 
 WebApplication app = builder.Build();
 
@@ -50,3 +51,8 @@ app.MapStaticAssets();
 app.MapRazorPages().WithStaticAssets();
 
 app.Run();
+
+/// <summary>Declared so the test project can start the real application.</summary>
+public partial class Program
+{
+}

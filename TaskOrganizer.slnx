@@ -3,6 +3,7 @@
     <Project Path="src/TaskOrganizer.Web/TaskOrganizer.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/TaskOrganizer.BrowserTests/TaskOrganizer.BrowserTests.csproj" />
     <Project Path="tests/TaskOrganizer.Tests/TaskOrganizer.Tests.csproj" />
   </Folder>
 </Solution>

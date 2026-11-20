@@ -28,13 +28,7 @@ public class PunchdownImporter
 
     public async Task<ImportResult> ImportAsync(string workbookPath)
     {
-        if (!File.Exists(workbookPath))
-        {
-            throw new DomainRuleException($"Workbook not found at {workbookPath}.");
-        }
-
-        // FileShare.ReadWrite lets the import run while the workbook is open in Excel.
-        using FileStream stream = new(workbookPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using FileStream stream = ImportWorkbook.OpenRead(workbookPath);
         return await ImportAsync(stream);
     }
 

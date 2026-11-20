@@ -22,3 +22,7 @@ html { font-size: 15px; }
 .prio-bar > span { display: block; }
 
 .plan-meter { height: .8rem; }
+
+details.project-group > summary { cursor: pointer; }
+.edit-cell { width: 11rem; }
+.edit-cell-narrow { width: 6.5rem; }

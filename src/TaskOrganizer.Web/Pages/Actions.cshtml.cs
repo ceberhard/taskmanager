@@ -26,14 +26,33 @@ public class ActionsModel : PageModel
 
     public IActionResult OnGet() => RedirectToPage("/Index");
 
-    public Task<IActionResult> OnPostAddAsync(string? title, int? projectId, TaskPriority priority, DateOnly? dueDate, double? estimateHours, bool planForToday)
+    /// <summary>
+    /// Quick-add. Unlike the other actions, a rejected submission is reported beside the
+    /// quick-add box with the typed values put back, so nothing has to be entered twice.
+    /// </summary>
+    public async Task<IActionResult> OnPostAddAsync(string? title, int? projectId, TaskPriority priority, DateOnly? dueDate, double? estimateHours, bool planForToday)
     {
-        return RunAsync(async () =>
+        string? problem = InputProblem();
+        if (problem is null)
         {
-            TaskDetails details = new(title, projectId, priority == 0 ? TaskPriority.Medium : priority, dueDate, estimateHours);
-            WorkTask task = await _tasks.AddAsync(details, TaskSource.Manual, planForToday);
-            return $"Added: {task.Title}";
-        });
+            try
+            {
+                TaskDetails details = new(title, projectId, priority == 0 ? TaskPriority.Medium : priority, dueDate, estimateHours);
+                WorkTask task = await _tasks.AddAsync(details, TaskSource.Manual, planForToday);
+                TempData["Flash"] = $"Added: {task.Title}";
+            }
+            catch (DomainRuleException ex)
+            {
+                problem = ex.Message;
+            }
+        }
+
+        if (problem is not null)
+        {
+            QuickAddDraft.Save(TempData, problem, Request.Form);
+        }
+
+        return RedirectBack();
     }
 
     public Task<IActionResult> OnPostInterruptAsync()
@@ -79,6 +98,18 @@ public class ActionsModel : PageModel
         });
     }
 
+    public Task<IActionResult> OnPostTimeAddAsync(DateOnly date, TimeOnly start, TimeOnly? end)
+    {
+        return RunAsync(() => _timeLog.AddEntryAsync(date, start, end));
+    }
+
+    public Task<IActionResult> OnPostTimeUpdateAsync(int id, TimeOnly start, TimeOnly? end)
+    {
+        return RunAsync(() => _timeLog.UpdateEntryAsync(id, start, end));
+    }
+
+    public Task<IActionResult> OnPostTimeDeleteAsync(int id) => RunAsync(() => _timeLog.DeleteEntryAsync(id));
+
     private Task<IActionResult> RunAsync(Func<Task> action)
     {
         return RunAsync(async () =>
@@ -90,28 +121,43 @@ public class ActionsModel : PageModel
 
     private async Task<IActionResult> RunAsync(Func<Task<string?>> action)
     {
-        if (!ModelState.IsValid)
+        string? problem = InputProblem();
+        if (problem is not null)
         {
-            // A value that could not be read (for example a malformed date) must not be dropped silently.
-            IEnumerable<string> problems = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-            TempData["Error"] = "Nothing was saved. " + string.Join(" ", problems);
-        }
-        else
-        {
-            try
-            {
-                string? message = await action();
-                if (message is not null)
-                {
-                    TempData["Flash"] = message;
-                }
-            }
-            catch (DomainRuleException ex)
-            {
-                TempData["Error"] = ex.Message;
-            }
+            TempData["Error"] = problem;
+            return RedirectBack();
         }
 
-        return LocalRedirect(Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/");
+        try
+        {
+            string? message = await action();
+            if (message is not null)
+            {
+                TempData["Flash"] = message;
+            }
+        }
+        catch (DomainRuleException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectBack();
     }
+
+    /// <summary>
+    /// A value that could not be read (for example a malformed date) must not be dropped
+    /// silently. Returns the message to show, or null when every posted value was readable.
+    /// </summary>
+    private string? InputProblem()
+    {
+        if (ModelState.IsValid)
+        {
+            return null;
+        }
+
+        IEnumerable<string> problems = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+        return "Nothing was saved. " + string.Join(" ", problems);
+    }
+
+    private IActionResult RedirectBack() => LocalRedirect(Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/");
 }
