@@ -1,0 +1,70 @@
+@page
+@model TimeModel
+@{
+    ViewData["Title"] = "Time";
+    WeekSummary week = Model.Summary;
+    string weekValue = Display.DateInput(week.WeekStart);
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-baseline mb-2">
+    <h1 class="h3">Week of @week.WeekStart.ToString("d MMMM yyyy")</h1>
+    <div class="btn-group">
+        <a class="btn btn-sm btn-outline-secondary" asp-page="/Time" asp-route-week="@Display.DateInput(week.WeekStart.AddDays(-7))">&laquo; Previous</a>
+        <a class="btn btn-sm btn-outline-secondary" asp-page="/Time">This week</a>
+        <a class="btn btn-sm btn-outline-secondary" asp-page="/Time" asp-route-week="@Display.DateInput(week.WeekStart.AddDays(7))">Next &raquo;</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        @foreach (DayLog day in week.Days)
+        {
+            <section class="border-bottom py-2 @(day.Date == Model.Today ? "bg-light" : "")">
+                <div class="d-flex justify-content-between">
+                    <h2 class="h6 mb-1">@day.Date.ToString("dddd d MMM")</h2>
+                    <span class="fw-semibold">@Display.Hours(day.TotalHours)</span>
+                </div>
+                @foreach (TimeEntry entry in day.Entries)
+                {
+                    <form method="post" class="d-flex flex-wrap gap-2 align-items-center mb-1">
+                        <input type="hidden" name="id" value="@entry.Id" />
+                        <input type="hidden" name="week" value="@weekValue" />
+                        <input type="time" name="start" value="@Display.TimeInput(entry.StartTime)" class="form-control form-control-sm time-input" required aria-label="Start" />
+                        <span>to</span>
+                        <input type="time" name="end" value="@Display.TimeInput(entry.EndTime)" class="form-control form-control-sm time-input" aria-label="End" />
+                        @if (entry.EndTime is null)
+                        {
+                            <span class="small @(day.Date == Model.Today ? "text-success" : "text-danger")">@(day.Date == Model.Today ? "running" : "open: set an end time")</span>
+                        }
+                        <button type="submit" asp-page-handler="Update" class="btn btn-sm btn-outline-primary">Save</button>
+                        <button type="submit" asp-page-handler="Delete" class="btn btn-sm btn-outline-danger" formnovalidate>Delete</button>
+                    </form>
+                }
+                <form method="post" asp-page-handler="Add" class="d-flex flex-wrap gap-2 align-items-center">
+                    <input type="hidden" name="date" value="@Display.DateInput(day.Date)" />
+                    <input type="hidden" name="week" value="@weekValue" />
+                    <input type="time" name="start" class="form-control form-control-sm time-input" required aria-label="Start" />
+                    <span>to</span>
+                    <input type="time" name="end" class="form-control form-control-sm time-input" aria-label="End" />
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Add</button>
+                </form>
+            </section>
+        }
+    </div>
+    <div class="col-lg-4">
+        <table class="table table-sm mt-3 mt-lg-0">
+            <tbody>
+                <tr><th>Weekly total</th><td class="text-end">@Display.Hours(week.WeeklyTotalHours)</td></tr>
+                <tr><th>Weekly goal</th><td class="text-end">@Display.Hours(week.WeeklyGoalHours)</td></tr>
+                <tr><th>Weekly remaining</th><td class="text-end">@Display.Hours(week.WeeklyRemainingHours)</td></tr>
+                <tr><th>Rollover in</th><td class="text-end">@Display.SignedHours(week.RolloverInHours)</td></tr>
+                <tr><th>Overall total</th><td class="text-end">@Display.Hours(week.OverallTotalHours)</td></tr>
+                <tr class="@(week.OverallRemainingHours <= 0 ? "table-success" : "")"><th>Overall remaining</th><td class="text-end">@Display.Hours(week.OverallRemainingHours)</td></tr>
+            </tbody>
+        </table>
+        <p class="small text-muted">
+            Rollover in is your opening balance plus hours over or under the goal for each earlier week that has entries.
+            Positive means ahead. Weeks with nothing logged are skipped. Change the goal and opening balance in <a asp-page="/Settings">Settings</a>.
+        </p>
+    </div>
+</div>

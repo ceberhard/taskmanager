@@ -1,0 +1,24 @@
+html { font-size: 15px; }
+
+.quick-title { flex: 1 1 18rem; min-width: 12rem; }
+.hours-input { width: 5.5rem; }
+.time-input { width: 8rem; }
+
+.task-list { list-style: none; padding: 0; margin: 0; }
+.task-row { border-bottom: 1px solid var(--bs-border-color); padding: .4rem 0; }
+.task-row .task-title { overflow-wrap: anywhere; }
+.task-row .task-meta { font-size: .8rem; color: var(--bs-secondary-color); }
+.task-row details > summary { font-size: .8rem; color: var(--bs-secondary-color); cursor: pointer; }
+.task-row.in-progress { background: #f3f8ff; }
+
+.prio { display: inline-block; min-width: 5.2rem; text-align: center; font-size: .72rem; font-weight: 600; padding: .1rem .4rem; border-radius: .25rem; color: #fff; }
+.prio-critical { background: #b02a37; }
+.prio-veryhigh { background: #d9480f; }
+.prio-high { background: #e0a800; color: #212529; }
+.prio-medium { background: #3d6fb4; }
+.prio-low { background: #8a939b; }
+
+.prio-bar { display: flex; height: .7rem; min-width: 10rem; border-radius: .2rem; overflow: hidden; background: var(--bs-secondary-bg); }
+.prio-bar > span { display: block; }
+
+.plan-meter { height: .8rem; }

@@ -1,0 +1,11 @@
+@model PriorityCounts
+<div class="prio-bar" title="@string.Join(", ", Display.Priorities.Select(p => $"{Display.Priority(p)}: {Model.For(p)}"))">
+    @foreach (TaskPriority priority in Display.Priorities)
+    {
+        int count = Model.For(priority);
+        if (count > 0)
+        {
+            <span class="@Display.PriorityCss(priority)" style="width: @((count * 100.0 / Model.Total).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span>
+        }
+    }
+</div>

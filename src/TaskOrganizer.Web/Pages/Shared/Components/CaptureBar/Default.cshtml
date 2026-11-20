@@ -1,0 +1,54 @@
+@using TaskOrganizer.Web.Domain
+@using TaskOrganizer.Web.Pages
+@model TaskOrganizer.Web.ViewComponents.CaptureBarModel
+
+<div class="capture-bar border-bottom bg-light py-2 mb-3">
+    <div class="container d-flex flex-wrap gap-2 align-items-center">
+        <form method="post" asp-page="/Actions" asp-page-handler="Add" class="d-flex flex-wrap gap-2 flex-grow-1 align-items-center">
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <input id="quick-title" name="title" class="form-control form-control-sm quick-title" required maxlength="1000"
+                   placeholder="Add a task and press Enter  (press / to jump here)" autocomplete="off" aria-label="Task title"
+                   autofocus="@(Model.FocusQuickAdd ? "autofocus" : null)" />
+            <select name="projectId" class="form-select form-select-sm w-auto" aria-label="Project">
+                <option value="">Unfiled</option>
+                @foreach (Project project in Model.Projects)
+                {
+                    <option value="@project.Id">@project.Name</option>
+                }
+            </select>
+            <select name="priority" class="form-select form-select-sm w-auto" aria-label="Priority">
+                @foreach (TaskPriority priority in Display.Priorities)
+                {
+                    <option value="@priority" selected="@(priority == TaskPriority.Medium)">@Display.Priority(priority)</option>
+                }
+            </select>
+            <input type="date" name="dueDate" class="form-control form-control-sm w-auto" aria-label="Expected delivery date" title="Expected delivery date" />
+            <input type="number" name="estimateHours" class="form-control form-control-sm hours-input" min="0.25" step="0.25" placeholder="hrs" aria-label="Rough size in hours" title="Rough size in hours" />
+            <label class="form-check-label small text-nowrap"><input type="checkbox" name="planForToday" value="true" class="form-check-input" /> today</label>
+            <button type="submit" class="btn btn-sm btn-primary">Add</button>
+        </form>
+
+        <form method="post" asp-page="/Actions" asp-page-handler="Interrupt">
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <button type="submit" class="btn btn-sm btn-warning" accesskey="i" title="Log an interruption now (Alt+I)">Interruption</button>
+        </form>
+
+        <form method="post" asp-page="/Actions" class="d-flex gap-2 align-items-center">
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            @if (Model.Clock.RunningEntry is not null)
+            {
+                <span class="small text-success text-nowrap">In since @Display.TimeInput(Model.Clock.RunningEntry.StartTime) · @Display.Hours(Model.Clock.TodayHours)</span>
+                <button type="submit" asp-page="/Actions" asp-page-handler="ClockOut" class="btn btn-sm btn-outline-secondary">Clock out</button>
+            }
+            else if (Model.Clock.StaleOpenEntry is not null)
+            {
+                <a asp-page="/Time" asp-route-week="@Display.DateInput(Model.Clock.StaleOpenEntry.Date)" class="small text-danger text-nowrap">Open entry from @Model.Clock.StaleOpenEntry.Date.ToString("ddd d MMM") needs an end time</a>
+            }
+            else
+            {
+                <span class="small text-muted text-nowrap">@Display.Hours(Model.Clock.TodayHours) today</span>
+                <button type="submit" asp-page="/Actions" asp-page-handler="ClockIn" class="btn btn-sm btn-outline-success">Clock in</button>
+            }
+        </form>
+    </div>
+</div>

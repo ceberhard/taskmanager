@@ -1,0 +1,67 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Today";
+    ViewData["FocusQuickAdd"] = true;
+    TodayView today = Model.Today;
+    double percent = today.TargetHours > 0 ? Math.Min(100, today.PlannedHours / today.TargetHours * 100) : 0;
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-baseline">
+    <h1 class="h3">@today.Date.ToString("dddd, d MMMM")</h1>
+    <div class="@(today.IsOverTarget ? "text-danger fw-semibold" : "text-muted")">
+        Planned @Display.Hours(today.PlannedHours) of @Display.Hours(today.TargetHours)
+        @if (today.UnsizedCount > 0)
+        {
+            <span> · @today.UnsizedCount unsized</span>
+        }
+        @if (today.IsOverTarget)
+        {
+            <span> · over target by @Display.Hours(today.PlannedHours - today.TargetHours)</span>
+        }
+    </div>
+</div>
+<div class="progress plan-meter mb-3" role="progressbar" aria-label="Planned hours against target" aria-valuenow="@((int)percent)" aria-valuemin="0" aria-valuemax="100">
+    <div class="progress-bar @(today.IsOverTarget ? "bg-danger" : "")" style="width: @((int)percent)%"></div>
+</div>
+
+@if (today.CarriedOver.Count > 0)
+{
+    <section class="mb-4">
+        <h2 class="h5 text-danger">Carried over (@today.CarriedOver.Count)</h2>
+        <p class="small text-muted mb-1">Planned for an earlier day and not finished. Move each one to Today or back to the backlog.</p>
+        <ul class="task-list">
+            @foreach (WorkTask task in today.CarriedOver)
+            {
+                <partial name="_TaskRow" model="Model.Row(task)" />
+            }
+        </ul>
+    </section>
+}
+
+<section class="mb-4">
+    <h2 class="h5">To do today (@today.Planned.Count)</h2>
+    @if (today.Planned.Count == 0)
+    {
+        <p class="text-muted">Nothing planned yet. Pull tasks in from the <a asp-page="/Backlog">backlog</a>, or add one above with "today" ticked.</p>
+    }
+    <ul class="task-list">
+        @foreach (WorkTask task in today.Planned)
+        {
+            <partial name="_TaskRow" model="Model.Row(task)" />
+        }
+    </ul>
+</section>
+
+@if (today.CompletedToday.Count > 0)
+{
+    <section>
+        <h2 class="h5 text-success">Done today (@today.CompletedToday.Count)</h2>
+        <ul class="task-list">
+            @foreach (WorkTask task in today.CompletedToday)
+            {
+                <partial name="_TaskRow" model="Model.Row(task)" />
+            }
+        </ul>
+    </section>
+}

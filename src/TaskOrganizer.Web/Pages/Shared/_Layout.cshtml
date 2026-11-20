@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Task Organizer</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-expand navbar-light bg-white border-bottom">
+            <div class="container">
+                <a class="navbar-brand" asp-page="/Index">Task Organizer</a>
+                <ul class="navbar-nav flex-grow-1">
+                    <li class="nav-item"><a class="nav-link" asp-page="/Index">Today</a></li>
+                    <li class="nav-item"><a class="nav-link" asp-page="/Backlog">Backlog</a></li>
+                    <li class="nav-item"><a class="nav-link" asp-page="/Time">Time</a></li>
+                    <li class="nav-item"><a class="nav-link" asp-page="/Settings">Settings</a></li>
+                </ul>
+            </div>
+        </nav>
+        @await Component.InvokeAsync("CaptureBar", new { focusQuickAdd = ViewData["FocusQuickAdd"] as bool? ?? false })
+    </header>
+    <div class="container">
+        @if (TempData["Error"] is string error)
+        {
+            <div class="alert alert-danger" role="alert">@error</div>
+        }
+        @if (TempData["Flash"] is string flash)
+        {
+            <div class="alert alert-success" role="status">@flash</div>
+        }
+        <main role="main" class="pb-5">
+            @RenderBody()
+        </main>
+    </div>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

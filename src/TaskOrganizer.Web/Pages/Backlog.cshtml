@@ -1,0 +1,78 @@
+@page
+@model BacklogModel
+@{
+    ViewData["Title"] = "Backlog";
+    ViewData["FocusQuickAdd"] = true;
+    BacklogView backlog = Model.Backlog;
+}
+
+<h1 class="h3">Backlog <small class="text-muted">@backlog.Overall.Total open</small></h1>
+
+<section class="mb-4">
+    <h2 class="h6 text-muted">Open tasks by priority</h2>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle w-auto">
+            <thead>
+                <tr>
+                    <th></th>
+                    @foreach (TaskPriority priority in Display.Priorities)
+                    {
+                        <th class="text-end"><span class="prio @Display.PriorityCss(priority)">@Display.Priority(priority)</span></th>
+                    }
+                    <th class="text-end">Total</th>
+                    <th>Mix</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="fw-semibold">
+                    <td>All projects</td>
+                    @foreach (TaskPriority priority in Display.Priorities)
+                    {
+                        <td class="text-end">@backlog.Overall.For(priority)</td>
+                    }
+                    <td class="text-end">@backlog.Overall.Total</td>
+                    <td><partial name="_PriorityBar" model="backlog.Overall" /></td>
+                </tr>
+                @foreach (ProjectBacklog group in backlog.Groups.Where(g => g.Tasks.Count > 0))
+                {
+                    <tr>
+                        <td><a href="#project-@(group.Project?.Id ?? 0)">@group.Name</a></td>
+                        @foreach (TaskPriority priority in Display.Priorities)
+                        {
+                            <td class="text-end">@group.Counts.For(priority)</td>
+                        }
+                        <td class="text-end">@group.Counts.Total</td>
+                        <td><partial name="_PriorityBar" model="group.Counts" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@foreach (ProjectBacklog group in backlog.Groups)
+{
+    <section class="mb-4" id="project-@(group.Project?.Id ?? 0)">
+        <h2 class="h5">@group.Name <small class="text-muted">@group.Tasks.Count</small></h2>
+        @if (group.Tasks.Count == 0)
+        {
+            <p class="text-muted small">No open tasks.</p>
+        }
+        <ul class="task-list">
+            @foreach (WorkTask task in group.Tasks)
+            {
+                <partial name="_TaskRow" model="Model.Row(task, false)" />
+            }
+        </ul>
+    </section>
+}
+
+<details class="mb-4">
+    <summary class="h6">Closed in the last @Model.ClosedWindowDays days (@Model.RecentlyClosed.Count)</summary>
+    <ul class="task-list">
+        @foreach (WorkTask task in Model.RecentlyClosed)
+        {
+            <partial name="_TaskRow" model="Model.Row(task, true)" />
+        }
+    </ul>
+</details>

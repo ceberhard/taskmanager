@@ -1,0 +1,15 @@
+# Build output
+bin/
+obj/
+.vs/
+*.user
+
+# Real work data: the database and the source spreadsheet stay on this machine
+App_Data/
+*.db
+*.db-shm
+*.db-wal
+refs/
+
+# Scratch databases used when checking the app by hand
+tmp-verify/

@@ -1,0 +1,61 @@
+@page
+@model SettingsModel
+@{
+    ViewData["Title"] = "Settings";
+    AppSettings current = Model.Current;
+}
+
+<h1 class="h3">Settings</h1>
+
+<section class="mb-4">
+    <h2 class="h5">Targets</h2>
+    <form method="post" asp-page-handler="Save" class="row g-3" style="max-width: 46rem">
+        <div class="col-sm-6">
+            <label class="form-label" for="dailyPlanTargetHours">Daily plan target (hours)</label>
+            <input type="number" id="dailyPlanTargetHours" name="dailyPlanTargetHours" value="@Display.NumberInput(current.DailyPlanTargetHours)" min="0.25" max="24" step="0.25" class="form-control" required />
+            <div class="form-text">Today warns when planned task hours go past this.</div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label" for="weeklyGoalHours">Weekly goal (hours)</label>
+            <input type="number" id="weeklyGoalHours" name="weeklyGoalHours" value="@Display.NumberInput(current.WeeklyGoalHours)" min="1" max="168" step="0.25" class="form-control" required />
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label" for="openingRolloverHours">Opening rollover balance (hours)</label>
+            <input type="number" id="openingRolloverHours" name="openingRolloverHours" value="@Display.NumberInput(current.OpeningRolloverHours)" step="0.01" class="form-control" required />
+            <div class="form-text">The Rollover figure from your spreadsheet. Positive means ahead of goal.</div>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label" for="rolloverStartDate">Count rollover from (optional)</label>
+            <input type="date" id="rolloverStartDate" name="rolloverStartDate" value="@Display.DateInput(current.RolloverStartDate)" class="form-control" />
+            <div class="form-text">Weeks before this date are ignored. Leave empty to count every logged week.</div>
+        </div>
+        <div class="col-12"><button type="submit" class="btn btn-primary">Save</button></div>
+    </form>
+</section>
+
+<section class="mb-4">
+    <h2 class="h5">Projects</h2>
+    @foreach (Project project in Model.Projects)
+    {
+        <form method="post" asp-page-handler="RenameProject" class="d-flex gap-2 mb-1" style="max-width: 30rem">
+            <input type="hidden" name="id" value="@project.Id" />
+            <input name="name" value="@project.Name" class="form-control form-control-sm" required maxlength="100" aria-label="Project name" />
+            <button type="submit" class="btn btn-sm btn-outline-primary">Rename</button>
+        </form>
+    }
+    <form method="post" asp-page-handler="AddProject" class="d-flex gap-2 mt-2" style="max-width: 30rem">
+        <input name="name" class="form-control form-control-sm" required maxlength="100" placeholder="New project name" aria-label="New project name" />
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Add</button>
+    </form>
+</section>
+
+<section class="mb-4">
+    <h2 class="h5">Import from spreadsheet</h2>
+    <p class="small text-muted mb-2">
+        Reads the "@PunchdownImporter.SheetName" sheet of <code>@Model.WorkbookPath</code>. The workbook is only read, never changed.
+        Running it again adds only rows that were not imported before.
+    </p>
+    <form method="post" asp-page-handler="Import">
+        <button type="submit" class="btn btn-outline-primary">Import punch-down list</button>
+    </form>
+</section>
