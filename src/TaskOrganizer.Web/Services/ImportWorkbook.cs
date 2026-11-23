@@ -16,6 +16,14 @@ public static class ImportWorkbook
             throw new DomainRuleException($"Workbook not found at {workbookPath}.");
         }
 
-        return new FileStream(workbookPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        try
+        {
+            return new FileStream(workbookPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        }
+        catch (IOException ex)
+        {
+            // Reported as a rule failure so every page shows it the same way as other import problems.
+            throw new DomainRuleException($"Could not read the workbook: {ex.Message}");
+        }
     }
 }

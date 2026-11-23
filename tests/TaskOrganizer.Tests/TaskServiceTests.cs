@@ -284,23 +284,40 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task Planned_hours_are_compared_with_the_daily_target_and_unsized_tasks_are_counted_apart()
+    public async Task Planned_hours_count_an_unsized_task_at_the_assumed_size_and_say_how_much_is_assumed()
     {
-        // The target is in hours, so a task without a size must be visible as a gap rather than counted as zero work.
+        // Counting unsized work as nothing made the day look emptier than a suggested day did;
+        // both pages must give the same answer to "how full is today".
         using TestHost host = new(Monday9am);
         await host.Settings.UpdateAsync(40, 0, null, 3);
         await host.Tasks.AddAsync(Details("Two hours", hours: 2), planForToday: true);
         await host.Tasks.AddAsync(Details("Unsized"), planForToday: true);
-        TodayView underTarget = await host.Tasks.GetTodayAsync();
+        TodayView atTarget = await host.Tasks.GetTodayAsync();
 
-        await host.Tasks.AddAsync(Details("Ninety minutes", hours: 1.5), planForToday: true);
+        await host.Tasks.AddAsync(Details("Another unsized"), planForToday: true);
         TodayView overTarget = await host.Tasks.GetTodayAsync();
 
-        Assert.Equal(2, underTarget.PlannedHours);
-        Assert.Equal(1, underTarget.UnsizedCount);
-        Assert.False(underTarget.IsOverTarget);
-        Assert.Equal(3.5, overTarget.PlannedHours);
+        Assert.Equal(3, atTarget.PlannedHours);
+        Assert.Equal(1, atTarget.AssumedHours);
+        Assert.Equal(1, atTarget.UnsizedCount);
+        Assert.False(atTarget.IsOverTarget);
+        Assert.Equal(4, overTarget.PlannedHours);
         Assert.True(overTarget.IsOverTarget);
+    }
+
+    [Fact]
+    public async Task Today_and_a_suggested_day_agree_on_the_hours_already_planned()
+    {
+        using TestHost host = new(Monday9am);
+        await host.Settings.UpdateSuggestionSettingsAsync(70, 1.5, 3);
+        await host.Tasks.AddAsync(Details("Sized", hours: 2), planForToday: true);
+        await host.Tasks.AddAsync(Details("Unsized"), planForToday: true);
+
+        TodayView today = await host.Tasks.GetTodayAsync();
+        DayProposal proposal = await host.Suggestions.SuggestAsync(new SuggestionRequest(Array.Empty<int>(), null));
+
+        Assert.Equal(3.5, today.PlannedHours);
+        Assert.Equal(today.PlannedHours, proposal.AlreadyPlannedHours);
     }
 
     [Fact]

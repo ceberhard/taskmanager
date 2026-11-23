@@ -264,4 +264,61 @@ public class BrowserTests : IClassFixture<BrowserFixture>
         await Expect(hours.Nth(0)).ToHaveValueAsync("3");
         Assert.All(await SavedTasksAsync(session), task => Assert.Null(task.EstimateHours));
     }
+
+    [Fact]
+    public async Task A_day_is_planned_by_choosing_focus_getting_a_proposal_adjusting_it_and_accepting()
+    {
+        // The three steps are the feature: say what today is about, see a plan, change it, commit it.
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+        Project focus = await AddProjectAsync(session, "Focus work");
+        Project other = await AddProjectAsync(session, "Other work");
+        foreach (int number in Enumerable.Range(1, 5))
+        {
+            await AddTaskAsync(session, $"Focus task {number}", projectId: focus.Id);
+            await AddTaskAsync(session, $"Other task {number}", projectId: other.Id);
+        }
+
+        ILocator total = page.Locator("#proposal-total");
+        ILocator proposed = page.Locator("#proposed-tasks li.task-row");
+        ILocator others = page.Locator("#other-tasks li.task-row");
+        await page.GotoAsync("/");
+
+        await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "Suggest tasks" }).ClickAsync();
+        await page.Locator("#suggest-setup").GetByLabel("Focus work", new LocatorGetByLabelOptions { Exact = true }).CheckAsync();
+        await page.GetByLabel("Hours available today").FillAsync("4");
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Propose tasks" }).ClickAsync();
+
+        // Ten unsized tasks at an assumed hour each, four hours available, 70% to the focus project.
+        await Expect(proposed).ToHaveCountAsync(4);
+        await Expect(proposed.Filter(new LocatorFilterOptions { HasText = "Focus work" })).ToHaveCountAsync(3);
+        await Expect(proposed.First).ToContainTextAsync("assumed 1 h");
+        await Expect(proposed.First).ToContainTextAsync("focus project");
+        await Expect(total).ToHaveTextAsync("4 h of 4 h");
+
+        await proposed.Filter(new LocatorFilterOptions { HasText = "Focus task 1" }).GetByRole(AriaRole.Checkbox).UncheckAsync();
+        await Expect(total).ToHaveTextAsync("3 h of 4 h");
+
+        // The other project's tasks sit in a collapsed group; the filter finds one by title and opens its group.
+        ILocator filter = page.GetByLabel("Filter the tasks to swap in");
+        await Expect(others.Filter(new LocatorFilterOptions { HasText = "Other task 5" })).ToBeHiddenAsync();
+        await filter.FillAsync("other task 5");
+        await Expect(others.Filter(new LocatorFilterOptions { Visible = true })).ToHaveCountAsync(1);
+        await others.Filter(new LocatorFilterOptions { HasText = "Other task 5" }).GetByRole(AriaRole.Checkbox).CheckAsync();
+        await filter.FillAsync("no such task");
+        await Expect(page.Locator("#swap-no-match")).ToBeVisibleAsync();
+        await filter.FillAsync("Other task 4");
+        await others.Filter(new LocatorFilterOptions { HasText = "Other task 4" }).GetByRole(AriaRole.Checkbox).CheckAsync();
+        await filter.FillAsync(string.Empty);
+        await Expect(total).ToHaveTextAsync("5 h of 4 h (over by 1 h)");
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Plan these for today" }).First.ClickAsync();
+
+        await Expect(session.Message).ToHaveTextAsync("5 tasks planned for today.");
+        await Expect(page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "To do today (5)" })).ToBeVisibleAsync();
+        await Expect(page.GetByText("Planned 5 h of 4 h available today")).ToBeVisibleAsync();
+        await Expect(session.TaskRow("Other task 5")).ToBeVisibleAsync();
+        await Expect(session.TaskRow("Focus task 1")).ToHaveCountAsync(0);
+        List<WorkTask> saved = await SavedTasksAsync(session);
+        Assert.Equal(5, saved.Count(task => task.PlannedFor is not null));
+    }
 }

@@ -10,7 +10,7 @@ namespace TaskOrganizer.Web.Pages;
 /// (quick-add, interruption, task buttons, clock). Each handler runs one service call
 /// and sends the browser back to where it came from.
 /// </summary>
-public class ActionsModel : PageModel
+public class ActionsModel : ActionPageModel
 {
     private readonly TaskService _tasks;
     private readonly TimeLogService _timeLog;
@@ -121,42 +121,8 @@ public class ActionsModel : PageModel
 
     private async Task<IActionResult> RunAsync(Func<Task<string?>> action)
     {
-        string? problem = InputProblem();
-        if (problem is not null)
-        {
-            TempData["Error"] = problem;
-            return RedirectBack();
-        }
-
-        try
-        {
-            string? message = await action();
-            if (message is not null)
-            {
-                TempData["Flash"] = message;
-            }
-        }
-        catch (DomainRuleException ex)
-        {
-            TempData["Error"] = ex.Message;
-        }
-
+        await TryRunAsync(action);
         return RedirectBack();
-    }
-
-    /// <summary>
-    /// A value that could not be read (for example a malformed date) must not be dropped
-    /// silently. Returns the message to show, or null when every posted value was readable.
-    /// </summary>
-    private string? InputProblem()
-    {
-        if (ModelState.IsValid)
-        {
-            return null;
-        }
-
-        IEnumerable<string> problems = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-        return "Nothing was saved. " + string.Join(" ", problems);
     }
 
     private IActionResult RedirectBack() => LocalRedirect(Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/");

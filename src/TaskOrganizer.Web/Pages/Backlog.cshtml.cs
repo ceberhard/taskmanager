@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using TaskOrganizer.Web.Domain;
@@ -40,7 +39,7 @@ public class PlanningRowRequest
 
 // Mass edit posts seven values per task; the default limit of 1024 form values would cap it near 145 tasks.
 [RequestFormLimits(ValueCountLimit = 20000)]
-public class BacklogModel : PageModel
+public class BacklogModel : ActionPageModel
 {
     private const int RecentlyClosedDays = 14;
 
@@ -80,32 +79,33 @@ public class BacklogModel : PageModel
 
     public async Task<IActionResult> OnPostSaveAllAsync([FromForm] List<PlanningRowRequest> rows)
     {
-        if (!ModelState.IsValid)
+        string? unreadable = InputProblem("Nothing was saved. A priority, date or number of hours could not be read.");
+        if (unreadable is not null)
         {
             // The typed values could not be read, so there is nothing reliable to show again.
-            TempData["Error"] = "Nothing was saved. A priority, date or number of hours could not be read.";
+            ShowError(unreadable);
             return Redirect(ViewUrl(edit: true));
         }
 
-        try
+        bool saved = await TryRunAsync(async () =>
         {
             List<TaskPlanningEdit> edits = rows
                 .Where(r => r.IsChanged)
                 .Select(r => new TaskPlanningEdit(r.Id, r.Priority, r.DueDate, r.EstimateHours))
                 .ToList();
             int changed = await _tasks.UpdatePlanningAsync(edits);
-            TempData["Flash"] = changed == 1 ? "1 task updated." : $"{changed} tasks updated.";
+            return changed == 1 ? "1 task updated." : $"{changed} tasks updated.";
+        });
+        if (saved)
+        {
             return Redirect(ViewUrl(edit: false));
         }
-        catch (DomainRuleException ex)
-        {
-            // Show the form again exactly as typed, so only the offending row needs fixing.
-            TempData["Error"] = ex.Message;
-            _rejectedRows = rows.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
-            Edit = true;
-            await LoadAsync();
-            return Page();
-        }
+
+        // Show the form again exactly as typed, so only the offending row needs fixing.
+        _rejectedRows = rows.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
+        Edit = true;
+        await LoadAsync();
+        return Page();
     }
 
     /// <summary>The values to show for a task in edit mode: what was typed if a save was just rejected, otherwise what is stored.</summary>
@@ -126,22 +126,14 @@ public class BacklogModel : PageModel
     /// <summary>This page's address with the current filter, in or out of edit mode.</summary>
     public string ViewUrl(bool edit)
     {
-        QueryBuilder query = new();
-        foreach (int projectId in Project)
-        {
-            query.Add(nameof(Project), projectId.ToString());
-        }
-
-        foreach (TaskPriority priority in Priority)
-        {
-            query.Add(nameof(Priority), priority.ToString());
-        }
-
+        List<KeyValuePair<string, string>> query = new();
+        query.AddRange(Project.Select(id => KeyValuePair.Create(nameof(Project), id.ToString())));
+        query.AddRange(Priority.Select(priority => KeyValuePair.Create(nameof(Priority), priority.ToString())));
         if (edit)
         {
-            query.Add(nameof(Edit), "true");
+            query.Add(KeyValuePair.Create(nameof(Edit), "true"));
         }
 
-        return Url.Page("/Backlog") + query.ToQueryString();
+        return Url.PageWithQuery("/Backlog", query);
     }
 }

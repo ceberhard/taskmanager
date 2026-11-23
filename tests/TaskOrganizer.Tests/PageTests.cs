@@ -276,4 +276,211 @@ public class PageTests
         Assert.True(applied.IsSuccessStatusCode);
         Assert.Equal(12.5, balanceAfter);
     }
+
+    [Fact]
+    public async Task Opening_a_proposal_shows_the_reason_for_each_task_and_changes_nothing()
+    {
+        // A proposal is only something to look at; the day changes when it is accepted and not before.
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await AddTaskAsync(factory, "Urgent unsized thing", TaskPriority.Critical);
+        await AddTaskAsync(factory, "Ordinary thing", TaskPriority.High);
+
+        string html = WebUtility.HtmlDecode(await client.GetStringAsync("/Suggest?Proposed=true"));
+
+        Assert.Contains("Urgent unsized thing", html);
+        Assert.Contains("assumed 1 h", html);
+        Assert.Contains("Critical</span>", html);
+        Assert.Contains("High priority", html);
+        List<WorkTask> saved = await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().Tasks.ToListAsync());
+        Assert.All(saved, task => Assert.Null(task.PlannedFor));
+        Assert.Equal(0, await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().TaskFieldChanges.CountAsync()));
+    }
+
+    [Fact]
+    public async Task Accepting_a_proposal_plans_exactly_the_ticked_tasks_and_returns_to_today()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        WorkTask kept = await AddTaskAsync(factory, "Kept in the proposal");
+        WorkTask removed = await AddTaskAsync(factory, "Unticked");
+        WorkTask swappedIn = await AddTaskAsync(factory, "Swapped in");
+
+        HttpResponseMessage response = await PostFormAsync(client, "/Suggest?Proposed=true", "/Suggest?handler=Commit", new[]
+        {
+            Field("taskIds", kept.Id.ToString()), Field("taskIds", swappedIn.Id.ToString())
+        });
+
+        string html = await response.Content.ReadAsStringAsync();
+        Assert.Equal("/", response.RequestMessage!.RequestUri!.AbsolutePath);
+        Assert.Contains("2 tasks planned for today.", html);
+        List<WorkTask> saved = await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().Tasks.OrderBy(t => t.Id).ToListAsync());
+        Assert.Equal(factory.Today, saved.Single(t => t.Id == kept.Id).PlannedFor);
+        Assert.Equal(factory.Today, saved.Single(t => t.Id == swappedIn.Id).PlannedFor);
+        Assert.Null(saved.Single(t => t.Id == removed.Id).PlannedFor);
+        int historyRows = await factory.WithServicesAsync(services =>
+            services.GetRequiredService<AppDbContext>().TaskFieldChanges.CountAsync(c => c.Field == TaskField.PlannedFor));
+        Assert.Equal(2, historyRows);
+    }
+
+    [Fact]
+    public async Task Accepting_a_proposal_that_holds_a_task_closed_meanwhile_plans_nothing_and_returns_to_the_proposal()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        WorkTask open = await AddTaskAsync(factory, "Still open");
+        WorkTask closed = await AddTaskAsync(factory, "Finished meanwhile");
+        await factory.WithServicesAsync(async services =>
+        {
+            await services.GetRequiredService<TaskService>().CompleteAsync(closed.Id);
+            return true;
+        });
+
+        HttpResponseMessage response = await PostFormAsync(client, "/Suggest?Proposed=true", "/Suggest?handler=Commit", new[]
+        {
+            Field("Hours", "6"), Field("taskIds", open.Id.ToString()), Field("taskIds", closed.Id.ToString())
+        });
+
+        string html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+        Assert.Contains("Nothing was planned.", html);
+        Assert.Contains("Finished meanwhile", html);
+        Assert.Equal("/Suggest", response.RequestMessage!.RequestUri!.AbsolutePath);
+        Assert.Contains("Hours=6", response.RequestMessage.RequestUri.Query);
+        WorkTask stillOpen = await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().Tasks.SingleAsync(t => t.Id == open.Id));
+        Assert.Null(stillOpen.PlannedFor);
+    }
+
+    [Fact]
+    public async Task Suggestion_settings_saved_in_settings_are_used_by_the_next_proposal()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await AddTaskAsync(factory, "Unsized thing");
+
+        HttpResponseMessage saved = await PostFormAsync(client, "/Settings", "/Settings?handler=SaveSuggestion", new[]
+        {
+            Field("focusSharePercent", "50"), Field("assumedUnsizedHours", "2.5"), Field("dueSoonWorkingDays", "5")
+        });
+        string proposal = await client.GetStringAsync("/Suggest?Proposed=true");
+
+        Assert.Contains("Suggestion settings saved.", await saved.Content.ReadAsStringAsync());
+        Assert.Contains("assumed 2.5 h", proposal);
+        Assert.Contains("About 50% of the day", proposal);
+    }
+
+    [Fact]
+    public async Task Hours_that_cannot_be_read_show_an_error_instead_of_a_proposal()
+    {
+        // Falling back to the default hours silently would give a plan for a day I did not describe.
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await AddTaskAsync(factory, "Some task");
+
+        string html = await client.GetStringAsync("/Suggest?Proposed=true&Hours=abc");
+
+        Assert.Contains("The hours available could not be read.", html);
+        Assert.DoesNotContain("id=\"proposal\"", html);
+    }
+
+    [Fact]
+    public async Task Hours_outside_a_day_show_the_reason_instead_of_a_proposal()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await AddTaskAsync(factory, "Some task");
+
+        string html = await client.GetStringAsync("/Suggest?Proposed=true&Hours=30");
+
+        Assert.Contains("Hours available must be between 0 and 24.", html);
+        Assert.DoesNotContain("id=\"proposal\"", html);
+    }
+
+    [Fact]
+    public async Task Accepting_a_proposal_with_nothing_ticked_plans_nothing_and_says_so()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await AddTaskAsync(factory, "Left unticked");
+
+        HttpResponseMessage response = await PostFormAsync(client, "/Suggest?Proposed=true", "/Suggest?handler=Commit", Array.Empty<KeyValuePair<string, string>>());
+
+        Assert.Contains("0 tasks planned for today.", await response.Content.ReadAsStringAsync());
+        WorkTask saved = await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().Tasks.SingleAsync());
+        Assert.Null(saved.PlannedFor);
+    }
+
+    [Fact]
+    public async Task A_selection_that_cannot_be_read_plans_nothing()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        WorkTask task = await AddTaskAsync(factory, "Real task");
+
+        HttpResponseMessage response = await PostFormAsync(client, "/Suggest?Proposed=true", "/Suggest?handler=Commit", new[]
+        {
+            Field("taskIds", task.Id.ToString()), Field("taskIds", "not-a-number")
+        });
+
+        Assert.Contains("Nothing was planned. The selection could not be read.", await response.Content.ReadAsStringAsync());
+        WorkTask saved = await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().Tasks.SingleAsync());
+        Assert.Null(saved.PlannedFor);
+    }
+
+    [Fact]
+    public async Task After_a_plan_is_accepted_today_shows_its_hours_and_the_suggest_page_starts_from_its_choices()
+    {
+        // The proposal said "of 6 h"; Today saying "of 9 h" a moment later would make one of them look wrong.
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        Project focus = await factory.WithServicesAsync(services => services.GetRequiredService<ProjectService>().AddAsync("Focus work"));
+        WorkTask task = await AddTaskAsync(factory, "Unsized focus task", TaskPriority.Medium, focus.Id);
+
+        HttpResponseMessage accepted = await PostFormAsync(client, $"/Suggest?Proposed=true&Focus={focus.Id}&Hours=6", "/Suggest?handler=Commit", new[]
+        {
+            Field("Focus", focus.Id.ToString()), Field("Hours", "6"), Field("taskIds", task.Id.ToString()), Field("suggestedIds", task.Id.ToString())
+        });
+        string today = WebUtility.HtmlDecode(await accepted.Content.ReadAsStringAsync());
+        string suggestAgain = await client.GetStringAsync("/Suggest");
+
+        Assert.Contains("Planned 1 h of 6 h available today", today);
+        Assert.Contains("includes 1 h assumed for 1 unsized", today);
+        Assert.Contains($"name=\"Focus\" value=\"{focus.Id}\" class=\"form-check-input\" checked=\"checked\"", suggestAgain);
+        Assert.Contains("name=\"Hours\" value=\"6\"", suggestAgain);
+    }
+
+    [Fact]
+    public async Task Tasks_left_out_of_a_proposal_are_offered_by_project_with_focus_projects_first()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        Project other = await factory.WithServicesAsync(services => services.GetRequiredService<ProjectService>().AddAsync("Other work"));
+        Project focus = await factory.WithServicesAsync(services => services.GetRequiredService<ProjectService>().AddAsync("Focus work"));
+        await AddTaskAsync(factory, "Other task", TaskPriority.Medium, other.Id);
+        await AddTaskAsync(factory, "Focus task", TaskPriority.Medium, focus.Id);
+
+        string html = await client.GetStringAsync($"/Suggest?Proposed=true&Focus={focus.Id}&Hours=0");
+
+        int focusGroup = html.IndexOf("Focus work <small", StringComparison.Ordinal);
+        int otherGroup = html.IndexOf("Other work <small", StringComparison.Ordinal);
+        Assert.True(focusGroup > 0 && otherGroup > focusGroup, "The focus project should be listed before the other project in step 3.");
+        Assert.Contains("data-initially-open=\"true\"", html);
+        Assert.Contains("data-initially-open=\"false\"", html);
+    }
+
+    [Fact]
+    public async Task An_over_full_day_says_how_far_over_it_is_and_marks_what_does_not_fit()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await AddTaskAsync(factory, "First critical thing", TaskPriority.Critical);
+        await AddTaskAsync(factory, "Second critical thing", TaskPriority.Critical);
+        await AddTaskAsync(factory, "Ordinary thing", TaskPriority.High);
+
+        string html = WebUtility.HtmlDecode(await client.GetStringAsync("/Suggest?Proposed=true&Hours=1"));
+
+        Assert.Contains("Must do (2) · 2 h", html);
+        Assert.Contains("Must-do work alone is 1 h over the 1 h available", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "past today's hours"));
+        Assert.DoesNotContain("id=\"proposed-tasks\"", html);
+    }
 }

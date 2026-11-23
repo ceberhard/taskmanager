@@ -7,8 +7,6 @@ namespace TaskOrganizer.Web.Services;
 
 public class TaskService
 {
-    public const double EstimateStepHours = 0.25;
-
     private readonly AppDbContext _db;
     private readonly LocalClock _clock;
     private readonly SettingsService _settings;
@@ -128,6 +126,40 @@ public class TaskService
         await _db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Plans several tasks for today in one save, as when a suggested day is accepted.
+    /// If any task no longer exists or has been closed since it was offered, nothing is
+    /// planned and the message names it. Returns how many tasks were newly planned.
+    /// </summary>
+    public async Task<int> PlanManyForTodayAsync(IReadOnlyCollection<int> ids)
+    {
+        List<int> distinctIds = ids.Distinct().ToList();
+        List<WorkTask> tasks = await _db.Tasks.Where(t => distinctIds.Contains(t.Id)).ToListAsync();
+
+        List<string> problems = new();
+        if (tasks.Count != distinctIds.Count)
+        {
+            problems.Add("One or more tasks no longer exist.");
+        }
+
+        problems.AddRange(tasks.Where(t => !t.IsOpen).Select(t => $"\"{Shorten(t.Title)}\" has been closed."));
+        if (problems.Count > 0)
+        {
+            throw new DomainRuleException("Nothing was planned. " + string.Join(" ", problems) + " Ask for a new suggestion.");
+        }
+
+        DateOnly today = _clock.Today;
+        int planned = 0;
+        foreach (WorkTask task in tasks.Where(t => t.PlannedFor != today))
+        {
+            SetPlannedFor(task, today);
+            planned++;
+        }
+
+        await _db.SaveChangesAsync();
+        return planned;
+    }
+
     public async Task ReturnToBacklogAsync(int id)
     {
         WorkTask task = await FindAsync(id);
@@ -143,8 +175,8 @@ public class TaskService
             .Where(t => t.PlannedFor != null && (t.Status == WorkTaskStatus.ToDo || t.Status == WorkTaskStatus.InProgress))
             .ToListAsync();
 
-        List<WorkTask> planned = SortForWork(openPlanned.Where(t => t.PlannedFor == today));
-        List<WorkTask> carriedOver = SortForWork(openPlanned.Where(t => t.PlannedFor < today));
+        List<WorkTask> planned = TaskOrdering.ForWork(openPlanned.Where(t => t.PlannedFor == today));
+        List<WorkTask> carriedOver = TaskOrdering.ForWork(openPlanned.Where(t => t.PlannedFor < today));
 
         // Completed timestamps are UTC; look a day either side and then compare local dates.
         DateTime windowStartUtc = _clock.UtcNow.AddDays(-2);
@@ -158,14 +190,29 @@ public class TaskService
             .ToList();
 
         AppSettings settings = await _settings.GetAsync();
+
+        // Unsized tasks count at the assumed size, the same as in a suggested day, so the two
+        // pages never give different answers to "how full is today".
+        int unsizedCount = planned.Count(t => t.EstimateHours is null);
+        double assumedHours = unsizedCount * settings.AssumedUnsizedHours;
+        double plannedHours = planned.Sum(t => t.EstimateHours ?? 0) + assumedHours;
+
+        // If a suggestion was accepted today, the hours entered for it are today's capacity.
+        DayPlan? latestPlan = await _db.DayPlans
+            .Where(p => p.Date == today)
+            .OrderByDescending(p => p.Id)
+            .FirstOrDefaultAsync();
+
         return new TodayView(
             today,
             planned,
             carriedOver,
             completedToday,
-            planned.Sum(t => t.EstimateHours ?? 0),
-            planned.Count(t => t.EstimateHours is null),
-            settings.DailyPlanTargetHours);
+            plannedHours,
+            unsizedCount,
+            assumedHours,
+            latestPlan?.HoursAvailable ?? settings.DailyPlanTargetHours,
+            latestPlan is not null);
     }
 
     public async Task<BacklogView> GetBacklogAsync(BacklogFilter? filter = null)
@@ -179,7 +226,7 @@ public class TaskService
         List<WorkTask> shownTasks = openTasks.Where(effectiveFilter.Matches).ToList();
 
         List<ProjectBacklog> groups = new();
-        List<WorkTask> unfiled = SortForWork(shownTasks.Where(t => t.ProjectId is null));
+        List<WorkTask> unfiled = TaskOrdering.ForWork(shownTasks.Where(t => t.ProjectId is null));
         if (unfiled.Count > 0)
         {
             groups.Add(new ProjectBacklog(null, unfiled, PriorityCounts.From(unfiled)));
@@ -187,7 +234,7 @@ public class TaskService
 
         foreach (Project project in projects)
         {
-            List<WorkTask> projectTasks = SortForWork(shownTasks.Where(t => t.ProjectId == project.Id));
+            List<WorkTask> projectTasks = TaskOrdering.ForWork(shownTasks.Where(t => t.ProjectId == project.Id));
 
             // Unfiltered, an empty project is still listed so it can be seen and filled.
             // With a filter on, a project with nothing to show would only be noise.
@@ -216,15 +263,6 @@ public class TaskService
                 || (t.Status == WorkTaskStatus.Dropped && t.DroppedAtUtc >= sinceUtc))
             .ToListAsync();
         return closed.OrderByDescending(t => t.CompletedAtUtc ?? t.DroppedAtUtc).ToList();
-    }
-
-    private static List<WorkTask> SortForWork(IEnumerable<WorkTask> tasks)
-    {
-        return tasks
-            .OrderBy(t => t.Priority)
-            .ThenBy(t => t.DueDate ?? DateOnly.MaxValue)
-            .ThenBy(t => t.CreatedAtUtc)
-            .ToList();
     }
 
     private async Task ChangeStatusAsync(int id, WorkTaskStatus newStatus)
@@ -341,14 +379,7 @@ public class TaskService
             return null;
         }
 
-        double steps = hours / EstimateStepHours;
-        bool isWholeSteps = Math.Abs(steps - Math.Round(steps)) < 1e-9;
-        if (hours < EstimateStepHours || !isWholeSteps)
-        {
-            return "Size is in hours, in 15-minute steps, with a minimum of 0.25.";
-        }
-
-        return null;
+        return HoursRules.IsValidSize(hours) ? null : $"Size is {HoursRules.StepProblem}.";
     }
 
     private async Task<WorkTask> FindAsync(int id)

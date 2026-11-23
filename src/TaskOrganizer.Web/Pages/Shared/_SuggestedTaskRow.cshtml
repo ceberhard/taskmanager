@@ -1,0 +1,30 @@
+@model (SuggestedTask Item, bool IsSelected)
+@{
+    SuggestedTask item = Model.Item;
+}
+<li class="task-row">
+    <label class="d-flex flex-wrap gap-2 align-items-start mb-0">
+        <input type="checkbox" name="taskIds" value="@item.Task.Id" class="form-check-input mt-1 proposal-pick"
+               data-hours="@Display.NumberInput(item.Hours)" checked="@Model.IsSelected" />
+        <span class="prio @Display.PriorityCss(item.Task.Priority)">@Display.Priority(item.Task.Priority)</span>
+        <span class="flex-grow-1">
+            <span class="task-title d-block">@item.Task.Title</span>
+            <span class="task-meta d-block">
+                @(item.Task.Project?.Name ?? "Unfiled") ·
+                @if (item.IsAssumedSize)
+                {
+                    <span class="fst-italic">assumed @Display.Hours(item.Hours)</span>
+                }
+                else
+                {
+                    <span>@Display.Hours(item.Hours)</span>
+                }
+                · <span class="text-primary">@item.Reason</span>
+                @if (item.IsBeyondHours)
+                {
+                    <span class="badge text-bg-warning ms-1">past today's hours</span>
+                }
+            </span>
+        </span>
+    </label>
+</li>

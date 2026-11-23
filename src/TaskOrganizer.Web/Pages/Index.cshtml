@@ -8,12 +8,12 @@
 }
 
 <div class="d-flex flex-wrap justify-content-between align-items-baseline">
-    <h1 class="h3">@today.Date.ToString("dddd, d MMMM")</h1>
+    <h1 class="h3">@today.Date.ToString("dddd, d MMMM") <a asp-page="/Suggest" class="btn btn-sm btn-outline-primary align-middle ms-2">Suggest tasks</a></h1>
     <div class="@(today.IsOverTarget ? "text-danger fw-semibold" : "text-muted")">
-        Planned @Display.Hours(today.PlannedHours) of @Display.Hours(today.TargetHours)
+        Planned @Display.Hours(today.PlannedHours) of @Display.Hours(today.TargetHours)@(today.IsTargetFromDayPlan ? " available today" : "")
         @if (today.UnsizedCount > 0)
         {
-            <span> · @today.UnsizedCount unsized</span>
+            <span> · includes @Display.Hours(today.AssumedHours) assumed for @today.UnsizedCount unsized</span>
         }
         @if (today.IsOverTarget)
         {

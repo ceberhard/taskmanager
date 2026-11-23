@@ -37,7 +37,17 @@ dotnet.exe test
 
 - **Quick-add** is at the top of every page. Press `/` to jump to it, type a title, press Enter. Project, priority, expected delivery date, size in hours and "today" are optional. If it is rejected, the reason appears under the box and what you typed is kept.
 - **Interruption** (or `Alt+I`) logs an interruption now and puts it in Today. Rename it afterwards.
+- **Today** counts a task with no size at the assumed size, the same as a suggested day does.
 - **Today** starts with a time section (start, stop, log or correct today's time), then what is planned for today, the planned hours against your daily target, and anything carried over from earlier days.
+- **Suggest tasks** (button on Today) plans a day in three steps: tick today's focus projects and set the hours available, read the proposal and the reason given for each task, then untick or swap in tasks and press "Plan these for today". Nothing is planned until that button is pressed. The rules, in order:
+  - Always included, most pressing first: Critical, overdue, due today, in progress, carried over. If these alone go past the hours available, nothing else is proposed and the ones that do not fit are marked.
+  - One Low task when it fits, picked at random each day and unchanged for the rest of that day.
+  - Very High tasks, from any project.
+  - The rest of the day is split between focus projects and everything else (70/30 by default), best first; a task due within 3 working days ranks one priority level higher.
+  - A task with no size counts as 1 hour and is marked "assumed".
+  - Focus share, assumed size and the due-soon window are in Settings.
+  - Step 3 lists the left-out tasks by project, focus projects first, with a title filter.
+  - Accepting a proposal records the day's hours available and focus projects. Today then measures against those hours, and asking for another suggestion the same day starts from the same choices.
 - **Backlog** lists open tasks by project, with a count of open tasks at each priority.
   - Filter by project and priority; the filter is part of the address, so a view can be bookmarked.
   - Collapse or expand projects; the browser remembers which are collapsed.

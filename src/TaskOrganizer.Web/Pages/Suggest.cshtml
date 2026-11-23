@@ -1,0 +1,134 @@
+@page
+@model SuggestModel
+@{
+    ViewData["Title"] = "Suggest tasks";
+    DayProposal? proposal = Model.Proposal;
+}
+
+<h1 class="h3">Suggest tasks for today</h1>
+
+<form method="get" class="border rounded p-3 mb-4" id="suggest-setup">
+    <input type="hidden" name="Proposed" value="true" />
+    <h2 class="h6">Step 1: what is today about?</h2>
+    <div class="d-flex flex-wrap gap-3 align-items-center mb-2">
+        <strong class="small">Focus projects</strong>
+        <label class="small"><input type="checkbox" name="Focus" value="@BacklogFilter.UnfiledProjectId" class="form-check-input" checked="@Model.Focus.Contains(BacklogFilter.UnfiledProjectId)" /> Unfiled</label>
+        @foreach (Project project in Model.Projects)
+        {
+            <label class="small"><input type="checkbox" name="Focus" value="@project.Id" class="form-check-input" checked="@Model.Focus.Contains(project.Id)" /> @project.Name</label>
+        }
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <label class="small fw-semibold" for="hours-available">Hours available today</label>
+        <input type="number" id="hours-available" name="Hours" value="@Display.NumberInput(Model.HoursShown)" min="0" max="24" step="0.25" class="form-control form-control-sm hours-input" />
+        <button type="submit" class="btn btn-sm btn-primary">@(proposal is null ? "Propose tasks" : "Propose again")</button>
+        <span class="small text-muted">
+            About @Model.Settings.FocusSharePercent% of the day goes to focus projects. Lower the hours on a day with meetings.
+        </span>
+    </div>
+</form>
+
+@if (proposal is not null)
+{
+    <form method="post" asp-page-handler="Commit" id="proposal"
+          data-available="@Display.NumberInput(proposal.HoursAvailable)" data-already="@Display.NumberInput(proposal.AlreadyPlannedHours)">
+        @foreach (int projectId in Model.Focus)
+        {
+            <input type="hidden" name="Focus" value="@projectId" />
+        }
+        @if (Model.Hours is double hours)
+        {
+            <input type="hidden" name="Hours" value="@Display.NumberInput(hours)" />
+        }
+
+        <div class="sticky-top bg-white border-bottom py-2 mb-3 d-flex flex-wrap gap-3 align-items-center">
+            <button type="submit" class="btn btn-primary">Plan these for today</button>
+            <span id="proposal-total" class="@(proposal.IsOverAvailable ? "text-danger fw-semibold" : "")">
+                @Display.Hours(proposal.TotalHours) of @Display.Hours(proposal.HoursAvailable)
+            </span>
+            @if (proposal.AlreadyPlannedCount > 0)
+            {
+                <span class="small text-muted">includes @Display.Hours(proposal.AlreadyPlannedHours) already planned today (@proposal.AlreadyPlannedCount)</span>
+            }
+            <a asp-page="/Index" class="small">Cancel</a>
+        </div>
+
+        <section class="mb-4">
+            <h2 class="h5">Step 2: proposed (@proposal.Suggested.Count)</h2>
+            <p class="small text-muted mb-1">Untick anything you disagree with. Nothing is planned until you press the button.</p>
+            @if (proposal.Suggested.Count == 0)
+            {
+                <p class="text-muted">Nothing to suggest: there is no room left today, or no open tasks outside today's plan.</p>
+            }
+            @foreach (SuggestedTask item in proposal.Suggested)
+            {
+                <input type="hidden" name="suggestedIds" value="@item.Task.Id" />
+            }
+
+            @if (proposal.MustInclude.Any())
+            {
+                <h3 class="h6 mt-3">Must do (@proposal.MustInclude.Count()) · @Display.Hours(proposal.MustInclude.Sum(s => s.Hours))</h3>
+                @if (proposal.MustIncludeOverHours > 0)
+                {
+                    <div class="alert alert-warning py-2" role="status" id="must-over">
+                        Must-do work alone is @Display.Hours(proposal.MustIncludeOverHours) over the @Display.Hours(proposal.HoursAvailable) available, so nothing else is proposed.
+                        Most pressing first; untick what cannot happen today.
+                    </div>
+                }
+                <ul class="task-list" id="must-tasks">
+                    @foreach (SuggestedTask item in proposal.MustInclude)
+                    {
+                        <partial name="_SuggestedTaskRow" model="(item, true)" />
+                    }
+                </ul>
+            }
+
+            @if (proposal.Optional.Any())
+            {
+                @if (proposal.MustInclude.Any())
+                {
+                    <h3 class="h6 mt-3">With the time left (@proposal.Optional.Count())</h3>
+                }
+                <ul class="task-list" id="proposed-tasks">
+                    @foreach (SuggestedTask item in proposal.Optional)
+                    {
+                        <partial name="_SuggestedTaskRow" model="(item, true)" />
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="mb-4">
+            <h2 class="h5">Step 3: swap in other tasks (@proposal.LeftOut.Count)</h2>
+            <p class="small text-muted mb-1">Open tasks that were left out, by project, best candidates first. Tick any that need to be done today.</p>
+            <input type="search" id="swap-filter" class="form-control form-control-sm mb-2" placeholder="Filter by title" aria-label="Filter the tasks to swap in" autocomplete="off" />
+            <div id="other-tasks">
+                @foreach (SwapGroup group in Model.SwapGroups)
+                {
+                    <details class="swap-group mb-2" open="@group.IsFocus" data-initially-open="@(group.IsFocus ? "true" : "false")">
+                        <summary class="fw-semibold">
+                            @group.Name <small class="text-muted">@group.Tasks.Count</small>
+                            @if (group.IsFocus)
+                            {
+                                <span class="badge text-bg-primary">focus</span>
+                            }
+                        </summary>
+                        <ul class="task-list">
+                            @foreach (SuggestedTask item in group.Tasks)
+                            {
+                                <partial name="_SuggestedTaskRow" model="(item, false)" />
+                            }
+                        </ul>
+                    </details>
+                }
+                <p id="swap-no-match" class="text-muted small" hidden>No task title matches.</p>
+            </div>
+        </section>
+
+        <button type="submit" class="btn btn-primary mb-4">Plan these for today</button>
+    </form>
+}
+
+@section Scripts {
+    <script src="~/js/suggest.js" asp-append-version="true"></script>
+}

@@ -5,6 +5,11 @@ namespace TaskOrganizer.Web.Services;
 /// <summary>The fields a person can set on a task. Timestamps, status and source are never taken from input.</summary>
 public record TaskDetails(string? Title, int? ProjectId, TaskPriority Priority, DateOnly? DueDate, double? EstimateHours);
 
+/// <summary>
+/// What the Today page shows. PlannedHours includes AssumedHours, the part contributed by the
+/// UnsizedCount tasks with no size. TargetHours is the hours entered for today's accepted
+/// suggestion when there is one (IsTargetFromDayPlan), otherwise the daily plan target.
+/// </summary>
 public record TodayView(
     DateOnly Date,
     IReadOnlyList<WorkTask> Planned,
@@ -12,9 +17,11 @@ public record TodayView(
     IReadOnlyList<WorkTask> CompletedToday,
     double PlannedHours,
     int UnsizedCount,
-    double TargetHours)
+    double AssumedHours,
+    double TargetHours,
+    bool IsTargetFromDayPlan)
 {
-    public bool IsOverTarget => PlannedHours > TargetHours;
+    public bool IsOverTarget => HoursRules.Exceeds(PlannedHours, TargetHours);
 }
 
 public record ProjectBacklog(Project? Project, IReadOnlyList<WorkTask> Tasks, PriorityCounts Counts)

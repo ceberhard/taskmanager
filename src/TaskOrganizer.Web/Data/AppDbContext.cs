@@ -15,6 +15,8 @@ public class AppDbContext : DbContext
     public DbSet<WorkTask> Tasks => Set<WorkTask>();
     public DbSet<TaskStatusChange> TaskStatusChanges => Set<TaskStatusChange>();
     public DbSet<TaskFieldChange> TaskFieldChanges => Set<TaskFieldChange>();
+    public DbSet<DayPlan> DayPlans => Set<DayPlan>();
+    public DbSet<DayPlanFocusProject> DayPlanFocusProjects => Set<DayPlanFocusProject>();
     public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
     public DbSet<AppSettings> Settings => Set<AppSettings>();
 
@@ -52,6 +54,17 @@ public class AppDbContext : DbContext
             entity.Property(c => c.OldValue).HasMaxLength(50);
             entity.Property(c => c.NewValue).HasMaxLength(50);
             entity.HasOne(c => c.WorkTask).WithMany().HasForeignKey(c => c.WorkTaskId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DayPlan>(entity =>
+        {
+            entity.HasIndex(p => p.Date);
+            entity.HasMany(p => p.FocusProjects).WithOne(f => f.DayPlan).HasForeignKey(f => f.DayPlanId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DayPlanFocusProject>(entity =>
+        {
+            entity.HasOne(f => f.Project).WithMany().HasForeignKey(f => f.ProjectId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // The "only one open entry" rule is a unique index added by raw SQL in the

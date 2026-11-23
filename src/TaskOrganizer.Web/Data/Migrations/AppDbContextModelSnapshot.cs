@@ -22,8 +22,17 @@ namespace TaskOrganizer.Web.Data.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("INTEGER");
 
+                    b.Property<double>("AssumedUnsizedHours")
+                        .HasColumnType("REAL");
+
                     b.Property<double>("DailyPlanTargetHours")
                         .HasColumnType("REAL");
+
+                    b.Property<int>("DueSoonWorkingDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FocusSharePercent")
+                        .HasColumnType("INTEGER");
 
                     b.Property<double>("OpeningRolloverHours")
                         .HasColumnType("REAL");
@@ -42,10 +51,65 @@ namespace TaskOrganizer.Web.Data.Migrations
                         new
                         {
                             Id = 1,
+                            AssumedUnsizedHours = 1.0,
                             DailyPlanTargetHours = 9.0,
+                            DueSoonWorkingDays = 3,
+                            FocusSharePercent = 70,
                             OpeningRolloverHours = 0.0,
                             WeeklyGoalHours = 40.0
                         });
+                });
+
+            modelBuilder.Entity("TaskOrganizer.Web.Domain.DayPlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AcceptedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("HoursAvailable")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("TasksAcceptedFromSuggestion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TasksSuggested")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TasksSwappedIn")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.ToTable("DayPlans");
+                });
+
+            modelBuilder.Entity("TaskOrganizer.Web.Domain.DayPlanFocusProject", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DayPlanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DayPlanId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("DayPlanFocusProjects");
                 });
 
             modelBuilder.Entity("TaskOrganizer.Web.Domain.Project", b =>
@@ -218,6 +282,24 @@ namespace TaskOrganizer.Web.Data.Migrations
                     b.ToTable("Tasks", (string)null);
                 });
 
+            modelBuilder.Entity("TaskOrganizer.Web.Domain.DayPlanFocusProject", b =>
+                {
+                    b.HasOne("TaskOrganizer.Web.Domain.DayPlan", "DayPlan")
+                        .WithMany("FocusProjects")
+                        .HasForeignKey("DayPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TaskOrganizer.Web.Domain.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("DayPlan");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("TaskOrganizer.Web.Domain.TaskFieldChange", b =>
                 {
                     b.HasOne("TaskOrganizer.Web.Domain.WorkTask", "WorkTask")
@@ -248,6 +330,11 @@ namespace TaskOrganizer.Web.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("TaskOrganizer.Web.Domain.DayPlan", b =>
+                {
+                    b.Navigation("FocusProjects");
                 });
 #pragma warning restore 612, 618
         }

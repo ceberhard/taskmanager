@@ -6,7 +6,7 @@ using TaskOrganizer.Web.Services;
 
 namespace TaskOrganizer.Web.Pages;
 
-public class SettingsModel : PageModel
+public class SettingsModel : ActionPageModel
 {
     private readonly SettingsService _settings;
     private readonly ProjectService _projects;
@@ -54,6 +54,15 @@ public class SettingsModel : PageModel
         {
             await _settings.UpdateAsync(weeklyGoalHours, openingRolloverHours, rolloverStartDate, dailyPlanTargetHours);
             return "Settings saved.";
+        });
+    }
+
+    public Task<IActionResult> OnPostSaveSuggestionAsync(int focusSharePercent, double assumedUnsizedHours, int dueSoonWorkingDays)
+    {
+        return RunAsync(async () =>
+        {
+            await _settings.UpdateSuggestionSettingsAsync(focusSharePercent, assumedUnsizedHours, dueSoonWorkingDays);
+            return "Suggestion settings saved.";
         });
     }
 
@@ -112,26 +121,7 @@ public class SettingsModel : PageModel
 
     private async Task<IActionResult> RunAsync(Func<Task<string>> action)
     {
-        if (!ModelState.IsValid)
-        {
-            TempData["Error"] = "Nothing was saved. Check that the numbers and dates are filled in correctly.";
-        }
-        else
-        {
-            try
-            {
-                TempData["Flash"] = await action();
-            }
-            catch (DomainRuleException ex)
-            {
-                TempData["Error"] = ex.Message;
-            }
-            catch (IOException ex)
-            {
-                TempData["Error"] = $"Could not read the workbook: {ex.Message}";
-            }
-        }
-
+        await TryRunAsync(async () => await action());
         return RedirectToPage();
     }
 }

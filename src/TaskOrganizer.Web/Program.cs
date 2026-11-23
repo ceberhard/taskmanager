@@ -21,6 +21,7 @@ builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<TimeLogService>();
 builder.Services.AddScoped<PunchdownImporter>();
 builder.Services.AddScoped<TimeLogImporter>();
+builder.Services.AddScoped<DaySuggestionService>();
 
 WebApplication app = builder.Build();
 
