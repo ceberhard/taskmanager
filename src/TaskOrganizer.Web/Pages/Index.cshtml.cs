@@ -32,7 +32,10 @@ public class IndexModel : PageModel
         Clock = await _timeLog.GetClockStatusAsync();
     }
 
-    public TaskRowModel Row(WorkTask task) => new(task, Projects, Today.Date, Request.CurrentUrl());
+    /// <summary>Rows on Today offer "Done for today" as the main button, with plain Done beside it.</summary>
+    public TaskRowModel Row(WorkTask task) => new(task, Projects, Today.Date, Request.CurrentUrl()) { OfferDoneForToday = true };
+
+    public ReviewSectionsModel Review => new(Today, Projects, Request.CurrentUrl());
 
     public DayTimeEntriesModel TimeEntries => new(TodayLog, Today.Date, Request.CurrentUrl());
 }

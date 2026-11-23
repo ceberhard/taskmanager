@@ -153,7 +153,7 @@ public class BrowserTests : IClassFixture<BrowserFixture>
         await session.TaskRow("Write the report").GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Today", Exact = true }).ClickAsync();
         await page.GotoAsync("/");
         await Expect(page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "To do today (1)" })).ToBeVisibleAsync();
-        await session.TaskRow("Write the report").GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Done" }).ClickAsync();
+        await session.TaskRow("Write the report").GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Done", Exact = true }).ClickAsync();
 
         await Expect(page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "Done today (1)" })).ToBeVisibleAsync();
         await Expect(page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "To do today (0)" })).ToBeVisibleAsync();
@@ -284,7 +284,7 @@ public class BrowserTests : IClassFixture<BrowserFixture>
         ILocator others = page.Locator("#other-tasks li.task-row");
         await page.GotoAsync("/");
 
-        await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "Suggest tasks" }).ClickAsync();
+        await page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Level = 1 }).GetByRole(AriaRole.Link, new LocatorGetByRoleOptions { Name = "Suggest tasks" }).ClickAsync();
         await page.Locator("#suggest-setup").GetByLabel("Focus work", new LocatorGetByLabelOptions { Exact = true }).CheckAsync();
         await page.GetByLabel("Hours available today").FillAsync("4");
         await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Propose tasks" }).ClickAsync();
@@ -320,5 +320,220 @@ public class BrowserTests : IClassFixture<BrowserFixture>
         await Expect(session.TaskRow("Focus task 1")).ToHaveCountAsync(0);
         List<WorkTask> saved = await SavedTasksAsync(session);
         Assert.Equal(5, saved.Count(task => task.PlannedFor is not null));
+    }
+
+    [Fact]
+    public async Task A_long_link_in_a_title_wraps_inside_the_title_and_leaves_the_buttons_on_one_line()
+    {
+        // Rows of uneven height with buttons in different places made the list hard to scan and easy to mis-click.
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+        await page.SetViewportSizeAsync(1280, 900);
+        string longLink = "https://example.com/" + string.Join("/", Enumerable.Repeat("a-very-long-path-segment", 12));
+        await AddTaskAsync(session, "Short title");
+        await AddTaskAsync(session, $"Review the pull request at {longLink} and reply to every comment on it");
+
+        foreach (string url in new[] { "/Backlog", "/" })
+        {
+            await session.App.WithServicesAsync(async services =>
+            {
+                TaskService tasks = services.GetRequiredService<TaskService>();
+                foreach (WorkTask task in await services.GetRequiredService<AppDbContext>().Tasks.ToListAsync())
+                {
+                    await tasks.PlanForTodayAsync(task.Id);
+                }
+
+                return true;
+            });
+            await page.GotoAsync(url);
+
+            foreach (string title in new[] { "Short title", "Review the pull request" })
+            {
+                ILocator row = session.TaskRow(title);
+                ILocator buttons = row.Locator(".task-actions button");
+                LocatorBoundingBoxResult rowBox = (await row.BoundingBoxAsync())!;
+                LocatorBoundingBoxResult first = (await buttons.First.BoundingBoxAsync())!;
+                LocatorBoundingBoxResult last = (await buttons.Last.BoundingBoxAsync())!;
+
+                Assert.True(Math.Abs(first.Y - last.Y) < 2, $"Buttons wrapped onto more than one line for '{title}' on {url}.");
+                Assert.True(first.Y - rowBox.Y < 12, $"Buttons were pushed below the title for '{title}' on {url}.");
+                Assert.True(last.X + last.Width <= rowBox.X + rowBox.Width + 1, $"Buttons overflow the row for '{title}' on {url}.");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task A_task_is_put_on_hold_with_a_typed_reason_shows_it_and_is_resumed()
+    {
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+        WorkTask task = await AddTaskAsync(session, "Review the pull request");
+        ILocator row = session.TaskRow("Review the pull request");
+        await page.GotoAsync("/Backlog");
+
+        await row.GetByText("Edit, hold, more").ClickAsync();
+        await Expect(row.GetByLabel("Hold reason")).ToHaveAttributeAsync("list", "hold-reasons");
+        await row.GetByLabel("Hold reason").FillAsync("AWAITING FEEDBACK FROM SAM");
+        await row.GetByLabel("Check back on").FillAsync("2026-11-20");
+        await row.GetByLabel("remember this reason").CheckAsync();
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Put on hold" }).ClickAsync();
+
+        await Expect(row).ToContainTextAsync("ON HOLD: AWAITING FEEDBACK FROM SAM");
+        await Expect(row).ToContainTextAsync("check back Fri 20 Nov");
+        await Expect(row).ToContainClassAsync("on-hold");
+        await Expect(row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Start" })).ToHaveCountAsync(0);
+        await Expect(page.Locator("#hold-reasons option[value='AWAITING FEEDBACK FROM SAM']")).ToHaveCountAsync(1);
+
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Resume" }).ClickAsync();
+        await Expect(row).Not.ToContainTextAsync("ON HOLD");
+        await Expect(row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Start" })).ToBeVisibleAsync();
+
+        await row.GetByText("Edit, hold, more").ClickAsync();
+        await row.GetByRole(AriaRole.Link, new LocatorGetByRoleOptions { Name = "History" }).ClickAsync();
+        await Expect(page.Locator("#task-history")).ToContainTextAsync("To do → On hold");
+        await Expect(page.Locator("#task-history")).ToContainTextAsync("AWAITING FEEDBACK FROM SAM");
+        await Expect(page.Locator("#task-history")).ToContainTextAsync("On hold → To do");
+        Assert.Equal(WorkTaskStatus.ToDo, (await SavedTasksAsync(session)).Single(t => t.Id == task.Id).Status);
+    }
+
+    [Fact]
+    public async Task Work_marked_done_for_today_stays_on_show_and_is_reviewed_the_next_day()
+    {
+        // The whole workflow from the spreadsheet: green today, then tomorrow I decide what it really was.
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+        foreach (string title in new[] { "Really finished", "Not finished after all", "Pick up later" })
+        {
+            WorkTask task = await AddTaskAsync(session, title);
+            await session.App.WithServicesAsync(async services =>
+            {
+                await services.GetRequiredService<TaskService>().PlanForTodayAsync(task.Id);
+                return true;
+            });
+        }
+
+        await page.GotoAsync("/");
+        foreach (string title in new[] { "Really finished", "Not finished after all", "Pick up later" })
+        {
+            await session.TaskRow(title).GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Done for today" }).ClickAsync();
+        }
+
+        ILocator doneForToday = page.Locator("#done-for-today li.task-row");
+        await Expect(doneForToday).ToHaveCountAsync(3);
+        await Expect(doneForToday.First).ToContainClassAsync("done-for-today");
+        await Expect(page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "To do today (0)" })).ToBeVisibleAsync();
+        await Expect(page.Locator("#awaiting-review")).ToHaveCountAsync(0);
+
+        session.App.Clock.Advance(TimeSpan.FromDays(1));
+        await page.GotoAsync("/Suggest");
+        await Expect(page.Locator("#before-planning #awaiting-review li.task-row")).ToHaveCountAsync(3);
+        await page.GotoAsync("/");
+        ILocator review = page.Locator("#awaiting-review li.task-row");
+        await Expect(review).ToHaveCountAsync(3);
+
+        await review.Filter(new LocatorFilterOptions { HasText = "Really finished" }).GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Done", Exact = true }).ClickAsync();
+        await review.Filter(new LocatorFilterOptions { HasText = "Not finished after all" }).GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Re-open for today" }).ClickAsync();
+        await review.Filter(new LocatorFilterOptions { HasText = "Pick up later" }).GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Backlog" }).ClickAsync();
+
+        await Expect(page.Locator("#awaiting-review")).ToHaveCountAsync(0);
+        await Expect(page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { Name = "To do today (1)" })).ToBeVisibleAsync();
+        await Expect(session.TaskRow("Not finished after all")).ToBeVisibleAsync();
+        await Expect(session.TaskRow("Really finished")).ToHaveCountAsync(0);
+        List<WorkTask> saved = await SavedTasksAsync(session);
+        WorkTask finished = saved.Single(t => t.Title == "Really finished");
+        Assert.Equal(WorkTaskStatus.Completed, finished.Status);
+        Assert.Equal(new DateTime(2026, 11, 19, 10, 0, 0, DateTimeKind.Utc), finished.CompletedAtUtc);
+        Assert.Equal(new DateTime(2026, 11, 20, 10, 0, 0, DateTimeKind.Utc), finished.ConfirmedAtUtc);
+        Assert.Null(saved.Single(t => t.Title == "Pick up later").PlannedFor);
+    }
+
+    [Fact]
+    public async Task Starting_tasks_gives_them_a_clear_in_progress_look_and_a_count_with_a_level()
+    {
+        // The count is the guard against quietly having too many things open at once.
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+        foreach (int number in Enumerable.Range(1, 4))
+        {
+            WorkTask task = await AddTaskAsync(session, $"Task {number}");
+            await session.App.WithServicesAsync(async services =>
+            {
+                await services.GetRequiredService<TaskService>().PlanForTodayAsync(task.Id);
+                return true;
+            });
+        }
+
+        ILocator indicator = page.Locator("#in-progress-indicator");
+        await page.GotoAsync("/");
+        await Expect(indicator).ToHaveTextAsync("None in progress");
+
+        await session.TaskRow("Task 1").GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Start" }).ClickAsync();
+        await Expect(indicator).ToHaveTextAsync("1 in progress · OK");
+        await Expect(session.TaskRow("Task 1")).ToContainClassAsync("in-progress");
+        await Expect(session.TaskRow("Task 1")).ToContainTextAsync("IN PROGRESS");
+        await Expect(session.TaskRow("Task 2")).Not.ToContainClassAsync("in-progress");
+
+        foreach (int number in Enumerable.Range(2, 3))
+        {
+            await session.TaskRow($"Task {number}").GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Start" }).ClickAsync();
+        }
+
+        await Expect(indicator).ToHaveTextAsync("4 in progress · Warning");
+    }
+
+    [Fact]
+    public async Task A_projects_tasks_get_one_priority_and_date_in_a_single_step_and_can_still_be_adjusted_before_saving()
+    {
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+        Project alpha = await AddProjectAsync(session, "Alpha");
+        Project beta = await AddProjectAsync(session, "Beta");
+        foreach (int number in Enumerable.Range(1, 3))
+        {
+            await AddTaskAsync(session, $"Alpha task {number}", projectId: alpha.Id);
+        }
+
+        await AddTaskAsync(session, "Beta task 1", projectId: beta.Id);
+        await AddTaskAsync(session, "Beta task 2", projectId: beta.Id);
+        ILocator alphaGroup = page.Locator($"details.project-group[data-project='{alpha.Id}']");
+        await page.GotoAsync("/Backlog?Edit=true");
+
+        await alphaGroup.GetByLabel("Priority for every task in Alpha").SelectOptionAsync("High");
+        await alphaGroup.GetByLabel("Expected delivery date for every task in Alpha").FillAsync("2026-12-04");
+        await alphaGroup.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Apply to these rows" }).ClickAsync();
+        await Expect(alphaGroup.Locator("[data-apply-result]")).ToContainTextAsync("Filled 3 rows");
+        await alphaGroup.Locator("[data-col='priority']").Nth(1).SelectOptionAsync("Critical");
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Save all changes" }).First.ClickAsync();
+
+        await Expect(session.Message).ToHaveTextAsync("3 tasks updated.");
+        List<WorkTask> saved = await SavedTasksAsync(session);
+        List<WorkTask> alphaTasks = saved.Where(t => t.ProjectId == alpha.Id).ToList();
+        Assert.Equal(new[] { TaskPriority.High, TaskPriority.Critical, TaskPriority.High }, alphaTasks.Select(t => t.Priority));
+        Assert.All(alphaTasks, t => Assert.Equal(new DateOnly(2026, 12, 4), t.DueDate));
+        Assert.All(saved.Where(t => t.ProjectId == beta.Id), t => Assert.Equal((TaskPriority.Medium, (DateOnly?)null), (t.Priority, t.DueDate)));
+    }
+
+    [Fact]
+    public async Task A_task_is_deleted_only_after_the_confirmation_is_ticked()
+    {
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+
+        // The title must not echo the words of the confirmation label, which every row contains.
+        await AddTaskAsync(session, "Duplicate entry");
+        await AddTaskAsync(session, "Real task");
+        ILocator row = session.TaskRow("Duplicate entry");
+        await page.GotoAsync("/Backlog");
+
+        await row.GetByText("Edit, hold, more").ClickAsync();
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Delete" }).ClickAsync();
+        Assert.Equal(2, (await SavedTasksAsync(session)).Count);
+
+        await row.GetByLabel("delete for good").CheckAsync();
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Delete" }).ClickAsync();
+
+        await Expect(session.Message).ToHaveTextAsync("Task deleted.");
+        await Expect(session.TaskRow("Duplicate entry")).ToHaveCountAsync(0);
+        Assert.Equal("Real task", Assert.Single(await SavedTasksAsync(session)).Title);
     }
 }

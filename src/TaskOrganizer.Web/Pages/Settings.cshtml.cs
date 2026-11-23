@@ -12,15 +12,17 @@ public class SettingsModel : ActionPageModel
     private readonly ProjectService _projects;
     private readonly PunchdownImporter _importer;
     private readonly TimeLogImporter _timeImporter;
+    private readonly HoldReasonService _holdReasons;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
 
-    public SettingsModel(SettingsService settings, ProjectService projects, PunchdownImporter importer, TimeLogImporter timeImporter, IConfiguration configuration, IWebHostEnvironment environment)
+    public SettingsModel(SettingsService settings, ProjectService projects, PunchdownImporter importer, TimeLogImporter timeImporter, HoldReasonService holdReasons, IConfiguration configuration, IWebHostEnvironment environment)
     {
         _settings = settings;
         _projects = projects;
         _importer = importer;
         _timeImporter = timeImporter;
+        _holdReasons = holdReasons;
         _configuration = configuration;
         _environment = environment;
     }
@@ -32,6 +34,7 @@ public class SettingsModel : ActionPageModel
     /// <summary>The Rollover figure found by the last time import, waiting for a yes or no. Null when there is nothing to offer.</summary>
     public double? OfferedRolloverHours { get; private set; }
     public IReadOnlyList<Project> Projects { get; private set; } = Array.Empty<Project>();
+    public IReadOnlyList<HoldReasonSuggestion> HoldReasons { get; private set; } = Array.Empty<HoldReasonSuggestion>();
 
     public string WorkbookPath => Path.GetFullPath(
         _configuration["Import:WorkbookPath"] ?? "../../refs/Time_Log.xlsx",
@@ -41,6 +44,7 @@ public class SettingsModel : ActionPageModel
     {
         Current = await _settings.GetAsync();
         Projects = await _projects.ListAsync();
+        HoldReasons = await _holdReasons.ListAsync();
         if (TempData[RolloverOfferKey] is string offered
             && double.TryParse(offered, NumberStyles.Float, CultureInfo.InvariantCulture, out double hours))
         {
@@ -63,6 +67,24 @@ public class SettingsModel : ActionPageModel
         {
             await _settings.UpdateSuggestionSettingsAsync(focusSharePercent, assumedUnsizedHours, dueSoonWorkingDays);
             return "Suggestion settings saved.";
+        });
+    }
+
+    public Task<IActionResult> OnPostAddHoldReasonAsync(string? text)
+    {
+        return RunAsync(async () =>
+        {
+            await _holdReasons.AddAsync(text);
+            return "Hold reason added.";
+        });
+    }
+
+    public Task<IActionResult> OnPostRemoveHoldReasonAsync(int id)
+    {
+        return RunAsync(async () =>
+        {
+            await _holdReasons.RemoveAsync(id);
+            return "Hold reason removed.";
         });
     }
 

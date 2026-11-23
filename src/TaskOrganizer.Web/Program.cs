@@ -22,6 +22,7 @@ builder.Services.AddScoped<TimeLogService>();
 builder.Services.AddScoped<PunchdownImporter>();
 builder.Services.AddScoped<TimeLogImporter>();
 builder.Services.AddScoped<DaySuggestionService>();
+builder.Services.AddScoped<HoldReasonService>();
 
 WebApplication app = builder.Build();
 

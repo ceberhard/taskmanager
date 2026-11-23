@@ -62,6 +62,10 @@ public class BacklogModel : ActionPageModel
     [BindProperty(SupportsGet = true)]
     public List<TaskPriority> Priority { get; set; } = new();
 
+    /// <summary>Statuses to show (To do, In progress, On hold, Done for today). Empty shows every open status.</summary>
+    [BindProperty(SupportsGet = true)]
+    public List<WorkTaskStatus> Status { get; set; } = new();
+
     /// <summary>True shows the mass-edit form instead of the normal rows.</summary>
     [BindProperty(SupportsGet = true)]
     public bool Edit { get; set; }
@@ -116,7 +120,7 @@ public class BacklogModel : ActionPageModel
 
     private async Task LoadAsync()
     {
-        Backlog = await _tasks.GetBacklogAsync(new BacklogFilter(Project, Priority));
+        Backlog = await _tasks.GetBacklogAsync(new BacklogFilter(Project, Priority, Status));
         RecentlyClosed = await _tasks.GetRecentlyClosedAsync(RecentlyClosedDays);
         Projects = await _projects.ListAsync();
     }
@@ -129,6 +133,7 @@ public class BacklogModel : ActionPageModel
         List<KeyValuePair<string, string>> query = new();
         query.AddRange(Project.Select(id => KeyValuePair.Create(nameof(Project), id.ToString())));
         query.AddRange(Priority.Select(priority => KeyValuePair.Create(nameof(Priority), priority.ToString())));
+        query.AddRange(Status.Select(status => KeyValuePair.Create(nameof(Status), status.ToString())));
         if (edit)
         {
             query.Add(KeyValuePair.Create(nameof(Edit), "true"));

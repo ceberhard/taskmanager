@@ -1,14 +1,29 @@
 @model TaskRowModel
 @{
     WorkTask task = Model.Task;
+    string holdButton = task.Status == WorkTaskStatus.OnHold ? "Update hold" : "Put on hold";
 }
-<li class="task-row @(task.Status == WorkTaskStatus.InProgress ? "in-progress" : "")">
-    <form method="post" class="d-flex flex-wrap gap-2 align-items-start">
+<li class="task-row @Display.StateCss(task.Status)">
+    <form method="post" class="task-row-main">
         <input type="hidden" name="id" value="@task.Id" />
         <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
         <span class="prio @Display.PriorityCss(task.Priority)">@Display.Priority(task.Priority)</span>
-        <div class="flex-grow-1">
-            <div class="task-title @(task.IsOpen ? "" : "text-decoration-line-through text-muted")">@Display.Linkify(task.Title)</div>
+        <div class="task-body">
+            <div class="task-title @(task.IsClosed ? "text-decoration-line-through text-muted" : "")">
+                @switch (task.Status)
+                {
+                    case WorkTaskStatus.InProgress:
+                        <span class="badge state-badge state-in-progress">IN PROGRESS</span>
+                        break;
+                    case WorkTaskStatus.OnHold:
+                        <span class="badge state-badge state-on-hold">ON HOLD: @task.HoldReason</span>
+                        break;
+                    case WorkTaskStatus.DoneForToday:
+                        <span class="badge state-badge state-done-for-today">DONE FOR TODAY</span>
+                        break;
+                }
+                @Display.Linkify(task.Title)
+            </div>
             <div class="task-meta">
                 @if (Model.ShowProject)
                 {
@@ -20,7 +35,7 @@
                 {
                     <span> · @Display.Hours(hours)</span>
                 }
-                else if (task.IsOpen)
+                else if (task.IsWorkable)
                 {
                     <span> · unsized</span>
                 }
@@ -32,7 +47,7 @@
                 {
                     <span> · @task.Source.ToString().ToLowerInvariant()</span>
                 }
-                @if (task.IsOpen && Model.IsPlannedToday)
+                @if (task.IsWorkable && Model.IsPlannedToday)
                 {
                     <span class="text-primary"> · planned today</span>
                 }
@@ -40,12 +55,31 @@
                 {
                     <span class="text-danger"> · carried over from @task.PlannedFor!.Value.ToString("ddd d MMM")</span>
                 }
+                @if (task.Status == WorkTaskStatus.OnHold)
+                {
+                    @if (task.HoldCheckBackOn is DateOnly checkBack)
+                    {
+                        <span class="@(Model.IsFollowUpDue ? "text-danger fw-semibold" : "")"> · @(Model.IsFollowUpDue ? "follow up was due" : "check back") @checkBack.ToString("ddd d MMM")</span>
+                    }
+                    else
+                    {
+                        <span> · no check-back date</span>
+                    }
+                }
             </div>
         </div>
-        <div class="d-flex flex-wrap gap-1">
-            @if (task.IsOpen)
+        <div class="task-actions">
+            @if (task.IsWorkable)
             {
-                <button type="submit" asp-page="/Actions" asp-page-handler="Complete" class="btn btn-sm btn-success">Done</button>
+                @if (Model.OfferDoneForToday)
+                {
+                    <button type="submit" asp-page="/Actions" asp-page-handler="DoneForToday" class="btn btn-sm btn-success" title="Finished for today; you sign it off tomorrow">Done for today</button>
+                    <button type="submit" asp-page="/Actions" asp-page-handler="Complete" class="btn btn-sm btn-outline-success" title="Finished, no second look needed">Done</button>
+                }
+                else
+                {
+                    <button type="submit" asp-page="/Actions" asp-page-handler="Complete" class="btn btn-sm btn-success">Done</button>
+                }
                 @if (!Model.IsPlannedToday)
                 {
                     <button type="submit" asp-page="/Actions" asp-page-handler="PlanToday" class="btn btn-sm btn-outline-primary">Today</button>
@@ -64,6 +98,18 @@
                 }
                 <button type="submit" asp-page="/Actions" asp-page-handler="Drop" class="btn btn-sm btn-outline-danger" title="Close without doing it">Drop</button>
             }
+            else if (task.Status == WorkTaskStatus.OnHold)
+            {
+                <button type="submit" asp-page="/Actions" asp-page-handler="Resume" class="btn btn-sm btn-primary" title="Take it off hold">Resume</button>
+                <button type="submit" asp-page="/Actions" asp-page-handler="Complete" class="btn btn-sm btn-outline-success">Done</button>
+                <button type="submit" asp-page="/Actions" asp-page-handler="Drop" class="btn btn-sm btn-outline-danger" title="Close without doing it">Drop</button>
+            }
+            else if (task.Status == WorkTaskStatus.DoneForToday)
+            {
+                <button type="submit" asp-page="/Actions" asp-page-handler="Complete" class="btn btn-sm btn-success" title="Sign it off; it leaves the list">Done</button>
+                <button type="submit" asp-page="/Actions" asp-page-handler="ReopenForToday" class="btn btn-sm btn-outline-primary" title="Not finished; back into today's work">Re-open for today</button>
+                <button type="submit" asp-page="/Actions" asp-page-handler="ToBacklog" class="btn btn-sm btn-outline-secondary" title="More to do, but not today">Backlog</button>
+            }
             else
             {
                 <button type="submit" asp-page="/Actions" asp-page-handler="Reopen" class="btn btn-sm btn-outline-secondary">Reopen</button>
@@ -72,8 +118,8 @@
     </form>
     @if (task.IsOpen)
     {
-        <details>
-            <summary>Edit</summary>
+        <details class="task-more">
+            <summary>Edit, hold, more</summary>
             <form method="post" asp-page="/Actions" asp-page-handler="Edit" class="d-flex flex-wrap gap-2 align-items-center mt-1">
                 <input type="hidden" name="id" value="@task.Id" />
                 <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
@@ -95,6 +141,27 @@
                 <input type="number" name="estimateHours" value="@Display.NumberInput(task.EstimateHours)" class="form-control form-control-sm hours-input" min="0.25" step="0.25" placeholder="hrs" aria-label="Rough size in hours" />
                 <button type="submit" class="btn btn-sm btn-primary">Save</button>
             </form>
+            @if (task.IsWorkable || task.Status == WorkTaskStatus.OnHold)
+            {
+                <form method="post" asp-page="/Actions" asp-page-handler="Hold" class="d-flex flex-wrap gap-2 align-items-center mt-2">
+                    <input type="hidden" name="id" value="@task.Id" />
+                    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+                    <input name="reason" value="@task.HoldReason" list="hold-reasons" class="form-control form-control-sm quick-title" required maxlength="200"
+                           placeholder="Why is it on hold? e.g. AWAITING FEEDBACK FROM ..." aria-label="Hold reason" autocomplete="off" />
+                    <input type="date" name="checkBackOn" value="@Display.DateInput(task.HoldCheckBackOn)" class="form-control form-control-sm w-auto" aria-label="Check back on" title="Check back on" />
+                    <label class="small text-nowrap"><input type="checkbox" name="rememberReason" value="true" class="form-check-input" /> remember this reason</label>
+                    <button type="submit" class="btn btn-sm btn-secondary">@holdButton</button>
+                </form>
+            }
+            <div class="d-flex flex-wrap gap-3 align-items-center mt-2">
+                <a asp-page="/History" asp-route-id="@task.Id" class="small">History</a>
+                <form method="post" asp-page="/Actions" asp-page-handler="Delete" class="d-flex flex-wrap gap-2 align-items-center">
+                    <input type="hidden" name="id" value="@task.Id" />
+                    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+                    <label class="small text-nowrap"><input type="checkbox" name="confirmDelete" value="true" class="form-check-input" required /> delete for good (created by mistake)</label>
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                </form>
+            </div>
         </details>
     }
 </li>

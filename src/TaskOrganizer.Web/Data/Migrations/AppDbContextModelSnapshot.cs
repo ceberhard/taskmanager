@@ -112,6 +112,43 @@ namespace TaskOrganizer.Web.Data.Migrations
                     b.ToTable("DayPlanFocusProjects");
                 });
 
+            modelBuilder.Entity("TaskOrganizer.Web.Domain.HoldReasonSuggestion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Text")
+                        .IsUnique();
+
+                    b.ToTable("HoldReasonSuggestions");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Text = "NEEDS TESTING"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Text = "COMMENTS POSTED"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Text = "AWAITING FEEDBACK"
+                        });
+                });
+
             modelBuilder.Entity("TaskOrganizer.Web.Domain.Project", b =>
                 {
                     b.Property<int>("Id")
@@ -183,6 +220,10 @@ namespace TaskOrganizer.Web.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ToStatus")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -229,7 +270,13 @@ namespace TaskOrganizer.Web.Data.Migrations
                     b.Property<DateTime?>("CompletedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("ConfirmedAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DoneForTodayAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DroppedAtUtc")
@@ -240,6 +287,13 @@ namespace TaskOrganizer.Web.Data.Migrations
 
                     b.Property<double?>("EstimateHours")
                         .HasColumnType("REAL");
+
+                    b.Property<DateOnly?>("HoldCheckBackOn")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HoldReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ImportKey")
                         .HasColumnType("TEXT");

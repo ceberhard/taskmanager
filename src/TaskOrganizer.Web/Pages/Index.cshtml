@@ -5,10 +5,17 @@
     ViewData["FocusQuickAdd"] = true;
     TodayView today = Model.Today;
     double percent = today.TargetHours > 0 ? Math.Min(100, today.PlannedHours / today.TargetHours * 100) : 0;
+    (string Label, string Css) inProgress = Display.InProgressLevel(today.InProgressCount);
 }
 
 <div class="d-flex flex-wrap justify-content-between align-items-baseline">
-    <h1 class="h3">@today.Date.ToString("dddd, d MMMM") <a asp-page="/Suggest" class="btn btn-sm btn-outline-primary align-middle ms-2">Suggest tasks</a></h1>
+    <h1 class="h3">
+        @today.Date.ToString("dddd, d MMMM")
+        <a asp-page="/Suggest" class="btn btn-sm btn-outline-primary align-middle ms-2">Suggest tasks</a>
+        <span id="in-progress-indicator" class="badge fs-6 @inProgress.Css align-middle ms-1" title="Tasks in progress at once, across all projects">
+            @(today.InProgressCount == 0 ? inProgress.Label : $"{today.InProgressCount} in progress · {inProgress.Label}")
+        </span>
+    </h1>
     <div class="@(today.IsOverTarget ? "text-danger fw-semibold" : "text-muted")">
         Planned @Display.Hours(today.PlannedHours) of @Display.Hours(today.TargetHours)@(today.IsTargetFromDayPlan ? " available today" : "")
         @if (today.UnsizedCount > 0)
@@ -50,6 +57,8 @@
     </div>
 </section>
 
+<partial name="_ReviewSections" model="Model.Review" />
+
 @if (today.CarriedOver.Count > 0)
 {
     <section class="mb-4">
@@ -68,7 +77,7 @@
     <h2 class="h5">To do today (@today.Planned.Count)</h2>
     @if (today.Planned.Count == 0)
     {
-        <p class="text-muted">Nothing planned yet. Pull tasks in from the <a asp-page="/Backlog">backlog</a>, or add one above with "today" ticked.</p>
+        <p class="text-muted">Nothing planned yet. Use <a asp-page="/Suggest">Suggest tasks</a>, pull tasks in from the <a asp-page="/Backlog">backlog</a>, or add one above with "today" ticked.</p>
     }
     <ul class="task-list">
         @foreach (WorkTask task in today.Planned)
@@ -77,6 +86,33 @@
         }
     </ul>
 </section>
+
+@if (today.DoneForToday.Count > 0)
+{
+    <section class="mb-4" id="done-for-today">
+        <h2 class="h5 text-success">Done for today (@today.DoneForToday.Count)</h2>
+        <p class="small text-muted mb-1">Finished for the day. These come back tomorrow for you to sign off, re-open or send to the backlog.</p>
+        <ul class="task-list">
+            @foreach (WorkTask task in today.DoneForToday)
+            {
+                <partial name="_TaskRow" model="Model.Row(task)" />
+            }
+        </ul>
+    </section>
+}
+
+@if (today.OnHold.Count > 0)
+{
+    <section class="mb-4" id="on-hold">
+        <h2 class="h5 text-secondary">On hold (@today.OnHold.Count)</h2>
+        <ul class="task-list">
+            @foreach (WorkTask task in today.OnHold)
+            {
+                <partial name="_TaskRow" model="Model.Row(task)" />
+            }
+        </ul>
+    </section>
+}
 
 @if (today.CompletedToday.Count > 0)
 {

@@ -22,6 +22,21 @@ public record TodayView(
     bool IsTargetFromDayPlan)
 {
     public bool IsOverTarget => HoursRules.Exceeds(PlannedHours, TargetHours);
+
+    /// <summary>Marked done for today, today. Still on show, with a finished look.</summary>
+    public IReadOnlyList<WorkTask> DoneForToday { get; init; } = Array.Empty<WorkTask>();
+
+    /// <summary>Marked done for today on an earlier day and not yet signed off, oldest first.</summary>
+    public IReadOnlyList<WorkTask> AwaitingReview { get; init; } = Array.Empty<WorkTask>();
+
+    /// <summary>On hold with a check-back day that has arrived, earliest first.</summary>
+    public IReadOnlyList<WorkTask> FollowUps { get; init; } = Array.Empty<WorkTask>();
+
+    /// <summary>On hold, part of a day's plan, and not yet due for follow-up.</summary>
+    public IReadOnlyList<WorkTask> OnHold { get; init; } = Array.Empty<WorkTask>();
+
+    /// <summary>How many tasks are in progress at once, across every project and day.</summary>
+    public int InProgressCount { get; init; }
 }
 
 public record ProjectBacklog(Project? Project, IReadOnlyList<WorkTask> Tasks, PriorityCounts Counts)
@@ -41,20 +56,24 @@ public record BacklogView(IReadOnlyList<ProjectBacklog> Groups, PriorityCounts O
 /// <summary>
 /// Which slice of the backlog to show. An empty list means "no restriction" for that dimension.
 /// </summary>
-public record BacklogFilter(IReadOnlyCollection<int> ProjectIds, IReadOnlyCollection<TaskPriority> Priorities)
+public record BacklogFilter(IReadOnlyCollection<int> ProjectIds, IReadOnlyCollection<TaskPriority> Priorities, IReadOnlyCollection<WorkTaskStatus>? Statuses = null)
 {
+    private IReadOnlyCollection<WorkTaskStatus> StatusList => Statuses ?? Array.Empty<WorkTaskStatus>();
+
     /// <summary>Stands in for "no project" in a project filter, since real ids start at 1.</summary>
     public const int UnfiledProjectId = 0;
 
     public static readonly BacklogFilter None = new(Array.Empty<int>(), Array.Empty<TaskPriority>());
 
-    public bool IsActive => ProjectIds.Count > 0 || Priorities.Count > 0;
+    public bool IsActive => ProjectIds.Count > 0 || Priorities.Count > 0 || StatusList.Count > 0;
 
     public bool IncludesProject(int? projectId) => ProjectIds.Count == 0 || ProjectIds.Contains(projectId ?? UnfiledProjectId);
 
     public bool Matches(WorkTask task)
     {
-        return IncludesProject(task.ProjectId) && (Priorities.Count == 0 || Priorities.Contains(task.Priority));
+        return IncludesProject(task.ProjectId)
+            && (Priorities.Count == 0 || Priorities.Contains(task.Priority))
+            && (StatusList.Count == 0 || StatusList.Contains(task.Status));
     }
 }
 

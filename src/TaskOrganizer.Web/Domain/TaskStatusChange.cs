@@ -14,4 +14,7 @@ public class TaskStatusChange
     public WorkTaskStatus? FromStatus { get; set; }
     public WorkTaskStatus ToStatus { get; set; }
     public DateTime ChangedAtUtc { get; set; }
+
+    /// <summary>The reason given when a task was put on hold or its hold was updated. Null otherwise.</summary>
+    public string? Note { get; set; }
 }

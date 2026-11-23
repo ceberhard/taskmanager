@@ -483,4 +483,117 @@ public class PageTests
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "past today's hours"));
         Assert.DoesNotContain("id=\"proposed-tasks\"", html);
     }
+
+    [Fact]
+    public async Task Deleting_without_the_confirmation_deletes_nothing()
+    {
+        // Delete cannot be undone, so a request that does not carry the confirmation must be refused by the server too.
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        WorkTask task = await AddTaskAsync(factory, "Keep me");
+
+        HttpResponseMessage refused = await PostFormAsync(client, "/Backlog", "/Actions?handler=Delete", new[] { Field("id", task.Id.ToString()), Field("returnUrl", "/Backlog") });
+        string afterRefusal = await refused.Content.ReadAsStringAsync();
+        HttpResponseMessage deleted = await PostFormAsync(client, "/Backlog", "/Actions?handler=Delete", new[]
+        {
+            Field("id", task.Id.ToString()), Field("confirmDelete", "true"), Field("returnUrl", "/Backlog")
+        });
+
+        Assert.Contains("Nothing was deleted.", afterRefusal);
+        Assert.Contains("Keep me", afterRefusal);
+        Assert.Contains("Task deleted.", await deleted.Content.ReadAsStringAsync());
+        Assert.Equal(0, await CountTasksAsync(factory));
+    }
+
+    [Fact]
+    public async Task The_history_page_lists_status_changes_with_reasons_and_size_changes_in_order()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        WorkTask task = await AddTaskAsync(factory, "Tracked task");
+        await factory.WithServicesAsync(async services =>
+        {
+            // Each step happens a little later than the one before, as it would in real use.
+            TaskService tasks = services.GetRequiredService<TaskService>();
+            factory.Clock.Advance(TimeSpan.FromMinutes(10));
+            await tasks.UpdateDetailsAsync(task.Id, new TaskDetails("Tracked task", null, TaskPriority.High, null, 2));
+            factory.Clock.Advance(TimeSpan.FromMinutes(10));
+            await tasks.HoldAsync(task.Id, "COMMENTS POSTED", null);
+            factory.Clock.Advance(TimeSpan.FromMinutes(10));
+            await tasks.HoldAsync(task.Id, "NEEDS TESTING", null);
+            factory.Clock.Advance(TimeSpan.FromMinutes(10));
+            await tasks.ResumeAsync(task.Id);
+            return true;
+        });
+
+        string html = WebUtility.HtmlDecode(await client.GetStringAsync($"/History?id={task.Id}"));
+        HttpResponseMessage missing = await client.GetAsync("/History?id=9999");
+
+        int created = html.IndexOf("Created as To do", StringComparison.Ordinal);
+        int sized = html.IndexOf("Size (hours): none → 2", StringComparison.Ordinal);
+        int held = html.IndexOf("To do → On hold", StringComparison.Ordinal);
+        int reasonChanged = html.IndexOf("On hold: reason changed", StringComparison.Ordinal);
+        int resumed = html.IndexOf("On hold → To do", StringComparison.Ordinal);
+        Assert.True(created > 0 && created < sized && sized < held && held < reasonChanged && reasonChanged < resumed, "History events are missing or out of order.");
+        Assert.Contains("COMMENTS POSTED", html);
+        Assert.Contains("NEEDS TESTING", html);
+        Assert.Contains("Priority: Medium → High", html);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_backlog_can_be_narrowed_to_tasks_on_hold_and_shows_why_each_is_held()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await AddTaskAsync(factory, "Active thing");
+        WorkTask parked = await AddTaskAsync(factory, "Parked thing");
+        await factory.WithServicesAsync(async services =>
+        {
+            await services.GetRequiredService<TaskService>().HoldAsync(parked.Id, "AWAITING FEEDBACK", null);
+            return true;
+        });
+
+        string html = await client.GetStringAsync("/Backlog?Status=OnHold");
+
+        Assert.Contains("Parked thing", html);
+        Assert.Contains("ON HOLD: AWAITING FEEDBACK", html);
+        Assert.DoesNotContain("Active thing", html);
+        Assert.Contains("showing 1 of 2 open", html);
+    }
+
+    [Fact]
+    public async Task Hold_reasons_added_in_settings_are_offered_on_every_page_and_can_be_removed()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage added = await PostFormAsync(client, "/Settings", "/Settings?handler=AddHoldReason", new[] { Field("text", "Blocked by release freeze") });
+        string backlog = await client.GetStringAsync("/Backlog");
+        int id = await factory.WithServicesAsync(async services =>
+            (await services.GetRequiredService<HoldReasonService>().ListAsync()).Single(r => r.Text == "Blocked by release freeze").Id);
+        await PostFormAsync(client, "/Settings", "/Settings?handler=RemoveHoldReason", new[] { Field("id", id.ToString()) });
+        string backlogAfterRemoval = await client.GetStringAsync("/Backlog");
+
+        Assert.Contains("Hold reason added.", await added.Content.ReadAsStringAsync());
+        Assert.Contains("<option value=\"Blocked by release freeze\">", backlog);
+        Assert.Contains("<option value=\"NEEDS TESTING\">", backlog);
+        Assert.DoesNotContain("Blocked by release freeze", backlogAfterRemoval);
+    }
+
+    [Theory]
+    [InlineData(0, "None in progress")]
+    [InlineData(1, "OK")]
+    [InlineData(3, "OK")]
+    [InlineData(4, "Warning")]
+    [InlineData(5, "Warning")]
+    [InlineData(6, "Too many")]
+    [InlineData(7, "Too many")]
+    [InlineData(8, "Danger")]
+    [InlineData(20, "Danger")]
+    public void The_in_progress_level_follows_the_agreed_bands(int count, string expectedLabel)
+    {
+        // 1 to 3 is fine, 4 to 5 a warning, 6 to 7 too many, 8 or more danger: the bands Chris chose.
+        Assert.Equal(expectedLabel, TaskOrganizer.Web.Pages.Display.InProgressLevel(count).Label);
+    }
 }

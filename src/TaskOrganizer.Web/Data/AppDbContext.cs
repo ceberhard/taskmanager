@@ -11,10 +11,13 @@ public class AppDbContext : DbContext
     {
     }
 
+    public const int HoldReasonMaxLength = 200;
+
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<WorkTask> Tasks => Set<WorkTask>();
     public DbSet<TaskStatusChange> TaskStatusChanges => Set<TaskStatusChange>();
     public DbSet<TaskFieldChange> TaskFieldChanges => Set<TaskFieldChange>();
+    public DbSet<HoldReasonSuggestion> HoldReasonSuggestions => Set<HoldReasonSuggestion>();
     public DbSet<DayPlan> DayPlans => Set<DayPlan>();
     public DbSet<DayPlanFocusProject> DayPlanFocusProjects => Set<DayPlanFocusProject>();
     public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
@@ -32,6 +35,7 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("Tasks");
             entity.Property(t => t.Title).HasMaxLength(1000);
+            entity.Property(t => t.HoldReason).HasMaxLength(HoldReasonMaxLength);
             // Enums are stored as text so the table can be read and queried by hand.
             entity.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
             entity.Property(t => t.Status).HasConversion<string>().HasMaxLength(20);
@@ -45,6 +49,7 @@ public class AppDbContext : DbContext
         {
             entity.Property(c => c.FromStatus).HasConversion<string>().HasMaxLength(20);
             entity.Property(c => c.ToStatus).HasConversion<string>().HasMaxLength(20);
+            entity.Property(c => c.Note).HasMaxLength(HoldReasonMaxLength);
             entity.HasOne(c => c.WorkTask).WithMany().HasForeignKey(c => c.WorkTaskId).OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -54,6 +59,16 @@ public class AppDbContext : DbContext
             entity.Property(c => c.OldValue).HasMaxLength(50);
             entity.Property(c => c.NewValue).HasMaxLength(50);
             entity.HasOne(c => c.WorkTask).WithMany().HasForeignKey(c => c.WorkTaskId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<HoldReasonSuggestion>(entity =>
+        {
+            entity.Property(r => r.Text).HasMaxLength(HoldReasonMaxLength).UseCollation("NOCASE");
+            entity.HasIndex(r => r.Text).IsUnique();
+            entity.HasData(
+                new HoldReasonSuggestion { Id = 1, Text = "NEEDS TESTING" },
+                new HoldReasonSuggestion { Id = 2, Text = "COMMENTS POSTED" },
+                new HoldReasonSuggestion { Id = 3, Text = "AWAITING FEEDBACK" });
         });
 
         modelBuilder.Entity<DayPlan>(entity =>

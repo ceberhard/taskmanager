@@ -108,18 +108,119 @@ public class TaskService
 
     public Task PauseAsync(int id) => ChangeStatusAsync(id, WorkTaskStatus.ToDo);
 
+    /// <summary>
+    /// Closes a task as finished. For a task that was done for today this is the sign-off:
+    /// the completion time is when it was marked, because that is when the work stopped.
+    /// </summary>
     public Task CompleteAsync(int id) => ChangeStatusAsync(id, WorkTaskStatus.Completed);
 
     public Task DropAsync(int id) => ChangeStatusAsync(id, WorkTaskStatus.Dropped);
 
+    /// <summary>Brings a closed task back as To do.</summary>
     public Task ReopenAsync(int id) => ChangeStatusAsync(id, WorkTaskStatus.ToDo);
+
+    /// <summary>Takes a task off hold; it becomes To do again and its hold reason is cleared.</summary>
+    public Task ResumeAsync(int id) => ChangeStatusAsync(id, WorkTaskStatus.ToDo);
+
+    /// <summary>
+    /// Marks a task finished for the day without closing it. It stays visible, and from the
+    /// next day it is offered for review: Done, re-open for today, or back to the backlog.
+    /// </summary>
+    public Task MarkDoneForTodayAsync(int id) => ChangeStatusAsync(id, WorkTaskStatus.DoneForToday);
+
+    /// <summary>
+    /// Puts a task on hold with a reason in the person's own words, or changes the reason or
+    /// check-back date of a task already on hold. Every call is recorded in the status history
+    /// with the reason. Optionally remembers the reason as a suggestion for next time.
+    /// </summary>
+    public async Task HoldAsync(int id, string? reason, DateOnly? checkBackOn, bool rememberReason = false)
+    {
+        string cleanReason = (reason ?? string.Empty).Trim();
+        if (cleanReason.Length == 0)
+        {
+            throw new DomainRuleException("Say why the task is on hold.");
+        }
+
+        if (cleanReason.Length > AppDbContext.HoldReasonMaxLength)
+        {
+            throw new DomainRuleException($"The hold reason must be {AppDbContext.HoldReasonMaxLength} characters or fewer.");
+        }
+
+        WorkTask task = await FindAsync(id);
+        ApplyStatus(task, WorkTaskStatus.OnHold, cleanReason);
+        task.HoldReason = cleanReason;
+        task.HoldCheckBackOn = checkBackOn;
+
+        if (rememberReason && !await _db.HoldReasonSuggestions.AnyAsync(r => r.Text == cleanReason))
+        {
+            _db.HoldReasonSuggestions.Add(new HoldReasonSuggestion { Text = cleanReason });
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>Review choice: the task was not finished after all, so it goes back into today's work.</summary>
+    public async Task ReopenForTodayAsync(int id)
+    {
+        WorkTask task = await FindAsync(id);
+        if (!task.IsWorkable)
+        {
+            ApplyStatus(task, WorkTaskStatus.ToDo, null);
+        }
+
+        SetPlannedFor(task, _clock.Today);
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>Review choice: more to do, but not today. The task returns to the backlog unplanned.</summary>
+    public async Task ReturnToBacklogAsync(int id)
+    {
+        WorkTask task = await FindAsync(id);
+        if (task.Status == WorkTaskStatus.DoneForToday)
+        {
+            ApplyStatus(task, WorkTaskStatus.ToDo, null);
+        }
+
+        SetPlannedFor(task, null);
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Removes a task and all of its history for good. Meant for tasks created by mistake;
+    /// real work that was abandoned should be dropped instead, so it still shows in reports.
+    /// </summary>
+    public async Task DeleteAsync(int id)
+    {
+        WorkTask task = await FindAsync(id);
+        _db.TaskStatusChanges.RemoveRange(await _db.TaskStatusChanges.Where(c => c.WorkTaskId == id).ToListAsync());
+        _db.TaskFieldChanges.RemoveRange(await _db.TaskFieldChanges.Where(c => c.WorkTaskId == id).ToListAsync());
+        _db.Tasks.Remove(task);
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task<List<TaskStatusChange>> GetStatusHistoryAsync(int id)
+    {
+        return await _db.TaskStatusChanges.Where(c => c.WorkTaskId == id).OrderBy(c => c.Id).ToListAsync();
+    }
+
+    public async Task<List<TaskFieldChange>> GetFieldHistoryAsync(int id)
+    {
+        return await _db.TaskFieldChanges.Where(c => c.WorkTaskId == id).OrderBy(c => c.Id).ToListAsync();
+    }
+
+    public async Task<WorkTask?> FindWithProjectAsync(int id)
+    {
+        return await _db.Tasks.Include(t => t.Project).FirstOrDefaultAsync(t => t.Id == id);
+    }
 
     public async Task PlanForTodayAsync(int id)
     {
         WorkTask task = await FindAsync(id);
-        if (!task.IsOpen)
+        if (!task.IsWorkable)
         {
-            throw new DomainRuleException("Only open tasks can be planned for today. Reopen it first.");
+            throw new DomainRuleException(task.IsClosed
+                ? "Only open tasks can be planned for today. Reopen it first."
+                : "This task is on hold or done for today. Resume or re-open it first.");
         }
 
         SetPlannedFor(task, _clock.Today);
@@ -142,7 +243,8 @@ public class TaskService
             problems.Add("One or more tasks no longer exist.");
         }
 
-        problems.AddRange(tasks.Where(t => !t.IsOpen).Select(t => $"\"{Shorten(t.Title)}\" has been closed."));
+        problems.AddRange(tasks.Where(t => t.IsClosed).Select(t => $"\"{Shorten(t.Title)}\" has been closed."));
+        problems.AddRange(tasks.Where(t => t.IsOpen && !t.IsWorkable).Select(t => $"\"{Shorten(t.Title)}\" is on hold or done for today."));
         if (problems.Count > 0)
         {
             throw new DomainRuleException("Nothing was planned. " + string.Join(" ", problems) + " Ask for a new suggestion.");
@@ -160,23 +262,27 @@ public class TaskService
         return planned;
     }
 
-    public async Task ReturnToBacklogAsync(int id)
-    {
-        WorkTask task = await FindAsync(id);
-        SetPlannedFor(task, null);
-        await _db.SaveChangesAsync();
-    }
-
     public async Task<TodayView> GetTodayAsync()
     {
         DateOnly today = _clock.Today;
-        List<WorkTask> openPlanned = await _db.Tasks
+        List<WorkTask> open = await _db.Tasks
             .Include(t => t.Project)
-            .Where(t => t.PlannedFor != null && (t.Status == WorkTaskStatus.ToDo || t.Status == WorkTaskStatus.InProgress))
+            .Where(t => t.Status != WorkTaskStatus.Completed && t.Status != WorkTaskStatus.Dropped)
             .ToListAsync();
 
-        List<WorkTask> planned = TaskOrdering.ForWork(openPlanned.Where(t => t.PlannedFor == today));
-        List<WorkTask> carriedOver = TaskOrdering.ForWork(openPlanned.Where(t => t.PlannedFor < today));
+        List<WorkTask> planned = TaskOrdering.ForWork(open.Where(t => t.IsWorkable && t.PlannedFor == today));
+        List<WorkTask> carriedOver = TaskOrdering.ForWork(open.Where(t => t.IsWorkable && t.PlannedFor < today));
+
+        // Done for today splits on the day it was marked: today's stay on show, earlier ones await review.
+        List<WorkTask> doneForToday = open.Where(t => t.Status == WorkTaskStatus.DoneForToday).OrderBy(t => t.DoneForTodayAtUtc).ToList();
+        List<WorkTask> markedToday = doneForToday.Where(t => MarkedDoneOn(t) == today).ToList();
+        List<WorkTask> awaitingReview = doneForToday.Where(t => MarkedDoneOn(t) < today).ToList();
+
+        // On hold: those whose check-back day has come are brought up for follow-up; the rest
+        // stay listed only if they were part of a day's plan.
+        List<WorkTask> onHold = TaskOrdering.ForWork(open.Where(t => t.Status == WorkTaskStatus.OnHold));
+        List<WorkTask> followUps = onHold.Where(t => t.HoldCheckBackOn <= today).OrderBy(t => t.HoldCheckBackOn).ToList();
+        List<WorkTask> parked = onHold.Where(t => !(t.HoldCheckBackOn <= today) && t.PlannedFor is not null).ToList();
 
         // Completed timestamps are UTC; look a day either side and then compare local dates.
         DateTime windowStartUtc = _clock.UtcNow.AddDays(-2);
@@ -212,18 +318,35 @@ public class TaskService
             unsizedCount,
             assumedHours,
             latestPlan?.HoursAvailable ?? settings.DailyPlanTargetHours,
-            latestPlan is not null);
+            latestPlan is not null)
+        {
+            DoneForToday = markedToday,
+            AwaitingReview = awaitingReview,
+            FollowUps = followUps,
+            OnHold = parked,
+            InProgressCount = open.Count(t => t.Status == WorkTaskStatus.InProgress)
+        };
+    }
+
+    /// <summary>The local day a task was marked done for today.</summary>
+    private DateOnly? MarkedDoneOn(WorkTask task)
+    {
+        return task.DoneForTodayAtUtc is DateTime markedAt ? _clock.ToLocalDate(markedAt) : null;
     }
 
     public async Task<BacklogView> GetBacklogAsync(BacklogFilter? filter = null)
     {
         BacklogFilter effectiveFilter = filter ?? BacklogFilter.None;
-        List<WorkTask> openTasks = await _db.Tasks
+        List<WorkTask> notClosed = await _db.Tasks
             .Include(t => t.Project)
-            .Where(t => t.Status == WorkTaskStatus.ToDo || t.Status == WorkTaskStatus.InProgress)
+            .Where(t => t.Status != WorkTaskStatus.Completed && t.Status != WorkTaskStatus.Dropped)
             .ToListAsync();
+
+        // The priority picture counts work still to be done: workable and on hold. A task that
+        // is done for today is listed, but no longer adds to the pile.
+        List<WorkTask> openTasks = notClosed.Where(t => t.Status != WorkTaskStatus.DoneForToday).ToList();
         List<Project> projects = await _db.Projects.OrderBy(p => p.SortOrder).ThenBy(p => p.Name).ToListAsync();
-        List<WorkTask> shownTasks = openTasks.Where(effectiveFilter.Matches).ToList();
+        List<WorkTask> shownTasks = notClosed.Where(effectiveFilter.Matches).ToList();
 
         List<ProjectBacklog> groups = new();
         List<WorkTask> unfiled = TaskOrdering.ForWork(shownTasks.Where(t => t.ProjectId is null));
@@ -268,26 +391,89 @@ public class TaskService
     private async Task ChangeStatusAsync(int id, WorkTaskStatus newStatus)
     {
         WorkTask task = await FindAsync(id);
-        WorkTaskStatus oldStatus = task.Status;
-        if (oldStatus == newStatus)
+        if (task.Status == newStatus)
         {
             return;
         }
 
-        bool closing = newStatus is WorkTaskStatus.Completed or WorkTaskStatus.Dropped;
-        if (closing && !task.IsOpen)
+        ApplyStatus(task, newStatus, null);
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// The moves a task may make. Anything else is refused, so a task cannot, for example, go
+    /// straight from Completed to Dropped (which would rewrite what happened) or be worked on
+    /// while it is on hold.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<WorkTaskStatus, WorkTaskStatus[]> AllowedMoves = new Dictionary<WorkTaskStatus, WorkTaskStatus[]>
+    {
+        [WorkTaskStatus.ToDo] = new[] { WorkTaskStatus.InProgress, WorkTaskStatus.OnHold, WorkTaskStatus.DoneForToday, WorkTaskStatus.Completed, WorkTaskStatus.Dropped },
+        [WorkTaskStatus.InProgress] = new[] { WorkTaskStatus.ToDo, WorkTaskStatus.OnHold, WorkTaskStatus.DoneForToday, WorkTaskStatus.Completed, WorkTaskStatus.Dropped },
+        [WorkTaskStatus.OnHold] = new[] { WorkTaskStatus.ToDo, WorkTaskStatus.OnHold, WorkTaskStatus.Completed, WorkTaskStatus.Dropped },
+        [WorkTaskStatus.DoneForToday] = new[] { WorkTaskStatus.ToDo, WorkTaskStatus.Completed, WorkTaskStatus.Dropped },
+        [WorkTaskStatus.Completed] = new[] { WorkTaskStatus.ToDo },
+        [WorkTaskStatus.Dropped] = new[] { WorkTaskStatus.ToDo }
+    };
+
+    /// <summary>
+    /// Moves a task to a new status, sets the timestamps that go with it, and adds the history
+    /// row to the pending save. The caller saves.
+    /// </summary>
+    private void ApplyStatus(WorkTask task, WorkTaskStatus newStatus, string? note)
+    {
+        WorkTaskStatus oldStatus = task.Status;
+        if (!AllowedMoves[oldStatus].Contains(newStatus))
         {
-            // A direct Completed <-> Dropped switch would rewrite what happened; go through reopen.
-            throw new DomainRuleException("This task is already closed. Reopen it first.");
+            throw new DomainRuleException(MoveRefusedMessage(task, newStatus));
         }
 
         DateTime now = _clock.UtcNow;
-        task.Status = newStatus;
-        task.CompletedAtUtc = newStatus == WorkTaskStatus.Completed ? now : null;
-        task.DroppedAtUtc = newStatus == WorkTaskStatus.Dropped ? now : null;
+        switch (newStatus)
+        {
+            case WorkTaskStatus.Completed:
+                // Signing off a done-for-today task: the work stopped when it was marked, not now.
+                bool isSignOff = oldStatus == WorkTaskStatus.DoneForToday && task.DoneForTodayAtUtc is not null;
+                task.CompletedAtUtc = isSignOff ? task.DoneForTodayAtUtc : now;
+                task.ConfirmedAtUtc = isSignOff ? now : null;
+                break;
+            case WorkTaskStatus.Dropped:
+                task.DroppedAtUtc = now;
+                break;
+            case WorkTaskStatus.DoneForToday:
+                task.DoneForTodayAtUtc = now;
+                break;
+            case WorkTaskStatus.ToDo:
+                // Back to open work, from wherever it was: nothing about a finish still applies.
+                task.CompletedAtUtc = null;
+                task.DroppedAtUtc = null;
+                task.ConfirmedAtUtc = null;
+                task.DoneForTodayAtUtc = null;
+                break;
+        }
 
-        _db.TaskStatusChanges.Add(new TaskStatusChange { WorkTaskId = task.Id, FromStatus = oldStatus, ToStatus = newStatus, ChangedAtUtc = now });
-        await _db.SaveChangesAsync();
+        if (newStatus != WorkTaskStatus.OnHold)
+        {
+            task.HoldReason = null;
+            task.HoldCheckBackOn = null;
+        }
+
+        task.Status = newStatus;
+        _db.TaskStatusChanges.Add(new TaskStatusChange { WorkTask = task, FromStatus = oldStatus, ToStatus = newStatus, ChangedAtUtc = now, Note = note });
+    }
+
+    private static string MoveRefusedMessage(WorkTask task, WorkTaskStatus newStatus)
+    {
+        if (task.IsClosed)
+        {
+            return "This task is already closed. Reopen it first.";
+        }
+
+        return task.Status switch
+        {
+            WorkTaskStatus.OnHold => "This task is on hold. Resume it first.",
+            WorkTaskStatus.DoneForToday => "This task is done for today. Re-open it first.",
+            _ => $"A task that is {task.Status} cannot become {newStatus}."
+        };
     }
 
     private async Task ApplyDetailsAsync(WorkTask task, TaskDetails details, bool recordChanges)

@@ -82,6 +82,13 @@
         {
             <label class="small"><input type="checkbox" name="Priority" value="@priority" class="form-check-input" checked="@Model.Priority.Contains(priority)" /> @Display.Priority(priority)</label>
         }
+    </div>
+    <div class="d-flex flex-wrap gap-3 align-items-center mt-1">
+        <strong class="small">Status</strong>
+        @foreach (WorkTaskStatus status in Display.OpenStatuses)
+        {
+            <label class="small"><input type="checkbox" name="Status" value="@status" class="form-check-input" checked="@Model.Status.Contains(status)" /> @Display.Status(status)</label>
+        }
         <button type="submit" class="btn btn-sm btn-primary">Apply filter</button>
         @if (backlog.IsFiltered)
         {
@@ -121,6 +128,10 @@
         {
             <input type="hidden" name="Priority" value="@priority" />
         }
+        @foreach (WorkTaskStatus status in Model.Status)
+        {
+            <input type="hidden" name="Status" value="@status" />
+        }
         <div class="sticky-top bg-white border-bottom py-2 mb-2 d-flex gap-2 align-items-center">
             <button type="submit" class="btn btn-sm btn-primary">Save all changes</button>
             <span class="small text-muted">Change any rows, then save once. Ctrl+Up / Ctrl+Down moves to the same field in the next row.</span>
@@ -129,6 +140,23 @@
         {
             <details class="project-group mb-3" data-project="@(group.Project?.Id ?? BacklogFilter.UnfiledProjectId)" open>
                 <summary class="h5">@group.Name <small class="text-muted">@group.Tasks.Count</small></summary>
+                @if (group.Tasks.Count > 1)
+                {
+                    @* Fills the rows below; nothing is saved until "Save all changes". These controls have no name, so they are not posted. *@
+                    <div class="project-apply d-flex flex-wrap gap-2 align-items-center mb-2">
+                        <span class="small fw-semibold">Set for all @group.Tasks.Count tasks in @group.Name:</span>
+                        <select class="form-select form-select-sm w-auto" data-apply="priority" aria-label="Priority for every task in @group.Name">
+                            <option value="">Priority (leave as is)</option>
+                            @foreach (TaskPriority priority in Display.Priorities)
+                            {
+                                <option value="@priority">@Display.Priority(priority)</option>
+                            }
+                        </select>
+                        <input type="date" class="form-control form-control-sm w-auto" data-apply="due" aria-label="Expected delivery date for every task in @group.Name" title="Expected delivery date (empty leaves dates as they are)" />
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-apply-button>Apply to these rows</button>
+                        <span class="small text-muted" data-apply-result role="status"></span>
+                    </div>
+                }
                 <table class="table table-sm align-middle">
                     <tbody>
                         @foreach (WorkTask task in group.Tasks)
@@ -141,6 +169,10 @@
                                     <input type="hidden" name="rows[@rowIndex].OriginalDueDate" value="@Display.DateInput(row.OriginalDueDate)" />
                                     <input type="hidden" name="rows[@rowIndex].OriginalEstimateHours" value="@Display.NumberInput(row.OriginalEstimateHours)" />
                                     @task.Title
+                                    @if (!task.IsWorkable)
+                                    {
+                                        <span class="badge state-badge @(task.Status == WorkTaskStatus.OnHold ? "state-on-hold" : "state-done-for-today") ms-1">@Display.Status(task.Status)</span>
+                                    }
                                 </td>
                                 <td class="edit-cell">
                                     <select name="rows[@rowIndex].Priority" class="form-select form-select-sm" data-col="priority" aria-label="Priority">

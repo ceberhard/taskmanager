@@ -17,7 +17,16 @@ public enum WorkTaskStatus
     Completed = 2,
 
     /// <summary>Closed without being done. Kept apart from Completed so reports never count it as delivered work.</summary>
-    Dropped = 3
+    Dropped = 3,
+
+    /// <summary>Parked with a reason, waiting on someone or something. Not finished and not being worked on.</summary>
+    OnHold = 4,
+
+    /// <summary>
+    /// Marked finished for the day but not yet signed off. From the next day it is reviewed
+    /// and becomes Completed, goes back into the day's work, or returns to the backlog.
+    /// </summary>
+    DoneForToday = 5
 }
 
 public enum TaskSource

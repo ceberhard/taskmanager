@@ -1,0 +1,27 @@
+@model ReviewSectionsModel
+@if (Model.Today.AwaitingReview.Count > 0)
+{
+    <section class="mb-4" id="awaiting-review">
+        <h2 class="h5 text-success">Finished earlier, confirm (@Model.Today.AwaitingReview.Count)</h2>
+        <p class="small text-muted mb-1">Marked done on an earlier day. For each: Done signs it off, Re-open for today puts it back in today's work, Backlog keeps it for later.</p>
+        <ul class="task-list">
+            @foreach (WorkTask task in Model.Today.AwaitingReview)
+            {
+                <partial name="_TaskRow" model="Model.Row(task)" />
+            }
+        </ul>
+    </section>
+}
+@if (Model.Today.FollowUps.Count > 0)
+{
+    <section class="mb-4" id="follow-ups">
+        <h2 class="h5 text-danger">Follow up (@Model.Today.FollowUps.Count)</h2>
+        <p class="small text-muted mb-1">On hold, and the check-back day has arrived. Chase it, then Resume it, mark it Done, or set a new date under "Edit, hold, more".</p>
+        <ul class="task-list">
+            @foreach (WorkTask task in Model.Today.FollowUps)
+            {
+                <partial name="_TaskRow" model="Model.Row(task)" />
+            }
+        </ul>
+    </section>
+}

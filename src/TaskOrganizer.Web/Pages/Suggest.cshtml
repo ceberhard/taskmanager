@@ -7,6 +7,14 @@
 
 <h1 class="h3">Suggest tasks for today</h1>
 
+@if (Model.Review.HasAnything)
+{
+    <div class="border rounded p-3 mb-4" id="before-planning">
+        <h2 class="h6">Before planning: deal with these first</h2>
+        <partial name="_ReviewSections" model="Model.Review" />
+    </div>
+}
+
 <form method="get" class="border rounded p-3 mb-4" id="suggest-setup">
     <input type="hidden" name="Proposed" value="true" />
     <h2 class="h6">Step 1: what is today about?</h2>

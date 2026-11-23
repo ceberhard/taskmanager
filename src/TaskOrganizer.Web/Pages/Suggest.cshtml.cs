@@ -16,13 +16,18 @@ public class SuggestModel : ActionPageModel
     private readonly DaySuggestionService _suggestions;
     private readonly ProjectService _projects;
     private readonly SettingsService _settings;
+    private readonly TaskService _tasks;
 
-    public SuggestModel(DaySuggestionService suggestions, ProjectService projects, SettingsService settings)
+    public SuggestModel(DaySuggestionService suggestions, ProjectService projects, SettingsService settings, TaskService tasks)
     {
         _suggestions = suggestions;
         _projects = projects;
         _settings = settings;
+        _tasks = tasks;
     }
+
+    /// <summary>What needs dealing with before a new day is proposed: sign-offs and follow-ups.</summary>
+    public ReviewSectionsModel Review { get; private set; } = null!;
 
     /// <summary>Today's focus projects (0 = unfiled). Chosen each day; kept in the address while planning.</summary>
     [BindProperty(SupportsGet = true)]
@@ -47,6 +52,7 @@ public class SuggestModel : ActionPageModel
     {
         Projects = await _projects.ListAsync();
         Settings = await _settings.GetAsync();
+        Review = new ReviewSectionsModel(await _tasks.GetTodayAsync(), Projects, Request.CurrentUrl());
         if (!Proposed)
         {
             await PrefillFromTodaysPlanAsync();

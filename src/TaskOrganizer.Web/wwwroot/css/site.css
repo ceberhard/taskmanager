@@ -5,11 +5,30 @@ html { font-size: 15px; }
 .time-input { width: 8rem; }
 
 .task-list { list-style: none; padding: 0; margin: 0; }
-.task-row { border-bottom: 1px solid var(--bs-border-color); padding: .4rem 0; }
+/* Every row has the same left edge, so a coloured state edge does not shift its text. */
+.task-row { border-bottom: 1px solid var(--bs-border-color); border-left: .3rem solid transparent; padding: .4rem .4rem .4rem .5rem; }
 .task-row .task-title { overflow-wrap: anywhere; }
 .task-row .task-meta { font-size: .8rem; color: var(--bs-secondary-color); }
 .task-row details > summary { font-size: .8rem; color: var(--bs-secondary-color); cursor: pointer; }
-.task-row.in-progress { background: #f3f8ff; }
+
+/* Priority, then the title taking whatever room is left and wrapping inside it, then the
+   buttons on one line. A long title or link can no longer push the buttons onto a new row. */
+.task-row-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: .5rem; align-items: start; }
+.task-actions { display: flex; flex-wrap: nowrap; gap: .25rem; white-space: nowrap; }
+@media (max-width: 767.98px) {
+    .task-row-main { grid-template-columns: auto minmax(0, 1fr); row-gap: .35rem; }
+    .task-actions { grid-column: 1 / -1; flex-wrap: wrap; }
+}
+
+/* State looks, after the spreadsheet: blue for in progress, green for done for today. */
+.task-row.in-progress { background: #dbeafe; border-left-color: #1d4ed8; }
+.task-row.done-for-today { background: #dcfce7; border-left-color: #15803d; }
+.task-row.on-hold { background: #f1f3f5; border-left-color: #868e96; }
+.state-badge { font-size: .7rem; vertical-align: middle; margin-right: .25rem; white-space: normal; text-align: left; }
+.state-in-progress { background: #1d4ed8; color: #fff; }
+.state-done-for-today { background: #15803d; color: #fff; }
+.state-on-hold { background: #495057; color: #fff; }
+.level-too-many { background: #e8590c; color: #fff; }
 
 .prio { display: inline-block; min-width: 5.2rem; text-align: center; font-size: .72rem; font-weight: 600; padding: .1rem .4rem; border-radius: .25rem; color: #fff; }
 .prio-critical { background: #b02a37; }

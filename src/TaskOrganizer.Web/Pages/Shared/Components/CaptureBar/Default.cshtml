@@ -61,3 +61,9 @@
         </form>
     </div>
 </div>
+<datalist id="hold-reasons">
+    @foreach (HoldReasonSuggestion reason in Model.HoldReasons)
+    {
+        <option value="@reason.Text"></option>
+    }
+</datalist>

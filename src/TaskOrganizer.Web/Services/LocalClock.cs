@@ -29,9 +29,11 @@ public class LocalClock
         }
     }
 
-    public DateOnly ToLocalDate(DateTime utc)
+    public DateOnly ToLocalDate(DateTime utc) => DateOnly.FromDateTime(ToLocal(utc));
+
+    /// <summary>A stored UTC time as local wall-clock time, for showing to the person.</summary>
+    public DateTime ToLocal(DateTime utc)
     {
-        DateTime local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _timeProvider.LocalTimeZone);
-        return DateOnly.FromDateTime(local);
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _timeProvider.LocalTimeZone);
     }
 }

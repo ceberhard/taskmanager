@@ -37,6 +37,13 @@ dotnet.exe test
 
 - **Quick-add** is at the top of every page. Press `/` to jump to it, type a title, press Enter. Project, priority, expected delivery date, size in hours and "today" are optional. If it is rejected, the reason appears under the box and what you typed is kept.
 - **Interruption** (or `Alt+I`) logs an interruption now and puts it in Today. Rename it afterwards.
+- **Task states.** A task is To do, In progress, On hold, Done for today, Done or Dropped.
+  - **In progress** rows are blue with a badge. Today shows how many are in progress at once: 1 to 3 OK, 4 to 5 Warning, 6 to 7 Too many, 8 or more Danger.
+  - **On hold** parks a task with a reason in your own words (under "Edit, hold, more" on any task), with an optional check-back date. It is left out of planned hours and suggestions. When the check-back day arrives it appears under "Follow up" at the top of Today and of Suggest tasks. Saved reasons are offered as you type and are managed in Settings.
+  - **Done for today** (the main button on Today) keeps the task on show in green. From the next day it appears under "Finished earlier, confirm" with three choices: Done, Re-open for today, or Backlog. Signing it off dates the completion to when you marked it.
+  - **Done** closes a task as finished. **Drop** closes it without doing it; only Done counts as delivered work. Both can be reversed from "Closed in the last 14 days" on the Backlog.
+  - **Delete** (under "Edit, hold, more", after ticking the confirmation) removes a task and its history for good. It is for tasks created by mistake.
+  - **History** (same place) lists every status change with its reason, and every change of size, priority and planned day.
 - **Today** counts a task with no size at the assumed size, the same as a suggested day does.
 - **Today** starts with a time section (start, stop, log or correct today's time), then what is planned for today, the planned hours against your daily target, and anything carried over from earlier days.
 - **Suggest tasks** (button on Today) plans a day in three steps: tick today's focus projects and set the hours available, read the proposal and the reason given for each task, then untick or swap in tasks and press "Plan these for today". Nothing is planned until that button is pressed. The rules, in order:
@@ -51,6 +58,8 @@ dotnet.exe test
 - **Backlog** lists open tasks by project, with a count of open tasks at each priority.
   - Filter by project and priority; the filter is part of the address, so a view can be bookmarked.
   - Collapse or expand projects; the browser remembers which are collapsed.
+  - Filter by status as well (To do, In progress, On hold, Done for today).
+  - In edit mode each project has a "Set for all" control that fills priority and/or date into every row of that project; adjust rows, then Save.
   - "Edit priorities, dates and hours" turns every row into inputs with one Save. Ctrl+Up / Ctrl+Down moves down a column. If any row is invalid, nothing is saved.
 - **Time** is the weekly clock-in/out log with the weekly goal, remaining hours and rollover balance.
 - **Settings** holds the daily target, weekly goal, opening rollover balance, projects, and the imports from `refs/Time_Log.xlsx`: the "Daily Punchdown" task list and the start/end times on the "Overall" sheet. The time import skips and lists rows with no end time and rows in the undated weekend block, and offers the sheet's Rollover figure as your opening balance.

@@ -19,7 +19,37 @@ public static partial class Display
     {
         WorkTaskStatus.ToDo => "To do",
         WorkTaskStatus.InProgress => "In progress",
+        WorkTaskStatus.OnHold => "On hold",
+        WorkTaskStatus.DoneForToday => "Done for today",
         _ => status.ToString()
+    };
+
+    /// <summary>The statuses a task can be listed under while it is not closed, in the order they are offered as filters.</summary>
+    public static readonly IReadOnlyList<WorkTaskStatus> OpenStatuses = new[]
+    {
+        WorkTaskStatus.ToDo, WorkTaskStatus.InProgress, WorkTaskStatus.OnHold, WorkTaskStatus.DoneForToday
+    };
+
+    /// <summary>CSS class that gives a task row the look of its state.</summary>
+    public static string StateCss(WorkTaskStatus status) => status switch
+    {
+        WorkTaskStatus.InProgress => "in-progress",
+        WorkTaskStatus.OnHold => "on-hold",
+        WorkTaskStatus.DoneForToday => "done-for-today",
+        _ => string.Empty
+    };
+
+    /// <summary>
+    /// How many tasks are in progress at once, as a word and a colour: 1 to 3 is fine,
+    /// 4 to 5 a warning, 6 to 7 too many, 8 or more danger.
+    /// </summary>
+    public static (string Label, string Css) InProgressLevel(int count) => count switch
+    {
+        0 => ("None in progress", "text-bg-secondary"),
+        <= 3 => ("OK", "text-bg-success"),
+        <= 5 => ("Warning", "text-bg-warning"),
+        <= 7 => ("Too many", "level-too-many"),
+        _ => ("Danger", "text-bg-danger")
     };
 
     public static string Hours(double hours) => hours.ToString("0.##", CultureInfo.InvariantCulture) + " h";

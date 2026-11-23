@@ -54,6 +54,7 @@ public sealed class TestHost : IDisposable
         Importer = new PunchdownImporter(Db, Clock);
         TimeImporter = new TimeLogImporter(Db, TimeLog);
         Suggestions = new DaySuggestionService(Db, Clock, Settings, Tasks);
+        HoldReasons = new HoldReasonService(Db);
     }
 
     public FakeTimeProvider Time { get; }
@@ -66,6 +67,7 @@ public sealed class TestHost : IDisposable
     public PunchdownImporter Importer { get; }
     public TimeLogImporter TimeImporter { get; }
     public DaySuggestionService Suggestions { get; }
+    public HoldReasonService HoldReasons { get; }
 
     /// <summary>A second context on the same database, to read what was actually saved.</summary>
     public AppDbContext NewContext()

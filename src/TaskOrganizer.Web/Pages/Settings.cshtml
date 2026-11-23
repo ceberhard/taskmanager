@@ -55,6 +55,23 @@
     </form>
 </section>
 
+<section class="mb-4" id="hold-reason-settings">
+    <h2 class="h5">Hold reasons</h2>
+    <p class="small text-muted mb-2">Offered while you type why a task is on hold. You can always type something else; removing one here does not change tasks already on hold.</p>
+    @foreach (HoldReasonSuggestion reason in Model.HoldReasons)
+    {
+        <form method="post" asp-page-handler="RemoveHoldReason" class="d-flex gap-2 align-items-center mb-1" style="max-width: 30rem">
+            <input type="hidden" name="id" value="@reason.Id" />
+            <span class="flex-grow-1">@reason.Text</span>
+            <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Remove @reason.Text">Remove</button>
+        </form>
+    }
+    <form method="post" asp-page-handler="AddHoldReason" class="d-flex gap-2 mt-2" style="max-width: 30rem">
+        <input name="text" class="form-control form-control-sm" required maxlength="200" placeholder="New hold reason" aria-label="New hold reason" />
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Add</button>
+    </form>
+</section>
+
 <section class="mb-4">
     <h2 class="h5">Projects</h2>
     @foreach (Project project in Model.Projects)

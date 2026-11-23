@@ -83,6 +83,32 @@ public class ActionsModel : ActionPageModel
 
     public Task<IActionResult> OnPostReopenAsync(int id) => RunAsync(() => _tasks.ReopenAsync(id));
 
+    public Task<IActionResult> OnPostDoneForTodayAsync(int id) => RunAsync(() => _tasks.MarkDoneForTodayAsync(id));
+
+    public Task<IActionResult> OnPostReopenForTodayAsync(int id) => RunAsync(() => _tasks.ReopenForTodayAsync(id));
+
+    public Task<IActionResult> OnPostHoldAsync(int id, string? reason, DateOnly? checkBackOn, bool rememberReason)
+    {
+        return RunAsync(() => _tasks.HoldAsync(id, reason, checkBackOn, rememberReason));
+    }
+
+    public Task<IActionResult> OnPostResumeAsync(int id) => RunAsync(() => _tasks.ResumeAsync(id));
+
+    /// <summary>Deleting cannot be undone, so the form must carry an explicit confirmation.</summary>
+    public Task<IActionResult> OnPostDeleteAsync(int id, bool confirmDelete)
+    {
+        return RunAsync(async () =>
+        {
+            if (!confirmDelete)
+            {
+                throw new DomainRuleException("Nothing was deleted. Tick the box to confirm.");
+            }
+
+            await _tasks.DeleteAsync(id);
+            return "Task deleted.";
+        });
+    }
+
     public Task<IActionResult> OnPostPlanTodayAsync(int id) => RunAsync(() => _tasks.PlanForTodayAsync(id));
 
     public Task<IActionResult> OnPostToBacklogAsync(int id) => RunAsync(() => _tasks.ReturnToBacklogAsync(id));
