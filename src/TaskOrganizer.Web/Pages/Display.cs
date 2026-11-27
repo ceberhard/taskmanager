@@ -24,6 +24,12 @@ public static partial class Display
         WorkTaskStatus.ToDo, WorkTaskStatus.InProgress, WorkTaskStatus.OnHold, WorkTaskStatus.DoneForToday
     };
 
+    public static readonly IReadOnlyList<TimeEntryKind> TimeEntryKinds = Enum.GetValues<TimeEntryKind>();
+
+    public static string Kind(TimeEntryKind kind) => kind == TimeEntryKind.Pto ? "PTO" : kind.ToString();
+
+    public static string KindCss(TimeEntryKind kind) => "kind-" + kind.ToString().ToLowerInvariant();
+
     /// <summary>What to call the link back to where a task came from.</summary>
     public static string ExternalLinkLabel(TaskSource source) => source switch
     {

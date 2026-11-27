@@ -8,4 +8,7 @@ public class TimeEntry
 
     /// <summary>Null while the entry is still running.</summary>
     public TimeOnly? EndTime { get; set; }
+
+    /// <summary>Work unless flagged as PTO, Holiday or Sick time.</summary>
+    public TimeEntryKind Kind { get; set; } = TimeEntryKind.Work;
 }

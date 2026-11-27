@@ -1,0 +1,7 @@
+@model TimeEntryKind
+<select name="kind" class="form-select form-select-sm w-auto" aria-label="Type of time">
+    @foreach (TimeEntryKind kind in Display.TimeEntryKinds)
+    {
+        <option value="@kind" selected="@(kind == Model)">@Display.Kind(kind)</option>
+    }
+</select>

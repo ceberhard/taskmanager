@@ -167,14 +167,14 @@ public class ActionsModel : ActionPageModel
         });
     }
 
-    public Task<IActionResult> OnPostTimeAddAsync(DateOnly date, TimeOnly start, TimeOnly? end)
+    public Task<IActionResult> OnPostTimeAddAsync(DateOnly date, TimeOnly start, TimeOnly? end, TimeEntryKind? kind)
     {
-        return RunAsync(() => _timeLog.AddEntryAsync(date, start, end));
+        return RunAsync(() => _timeLog.AddEntryAsync(date, start, end, kind ?? TimeEntryKind.Work));
     }
 
-    public Task<IActionResult> OnPostTimeUpdateAsync(int id, TimeOnly start, TimeOnly? end)
+    public Task<IActionResult> OnPostTimeUpdateAsync(int id, TimeOnly start, TimeOnly? end, TimeEntryKind? kind)
     {
-        return RunAsync(() => _timeLog.UpdateEntryAsync(id, start, end));
+        return RunAsync(() => _timeLog.UpdateEntryAsync(id, start, end, kind));
     }
 
     public Task<IActionResult> OnPostTimeDeleteAsync(int id) => RunAsync(() => _timeLog.DeleteEntryAsync(id));

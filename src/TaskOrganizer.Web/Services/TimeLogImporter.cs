@@ -12,7 +12,7 @@ public record TimeImportResult(int EntriesCreated, int EntriesSkipped, double? R
 /// Imports the start/end spans from the "Overall" sheet of the old time log. A date in
 /// column A starts a day; the rows from there down hold a start time in column B and an end
 /// time in column C until the next date. Every entry goes through the normal time log
-/// rules, so an import can never create overlapping or open-ended entries.
+/// rules, so an import can never create open-ended entries. Imported time is Work.
 /// </summary>
 public class TimeLogImporter
 {
@@ -66,7 +66,7 @@ public class TimeLogImporter
             }
             catch (DomainRuleException ex)
             {
-                // One span that breaks a rule (usually an overlap with an entry made in the app)
+                // One span that breaks a rule
                 // must not stop the rest of the week from coming in.
                 warnings.Add($"Row {span.RowNumber}: {span.Date:yyyy-MM-dd} {span.Start:HH\\:mm} to {span.End:HH\\:mm} was skipped. {ex.Message}");
             }

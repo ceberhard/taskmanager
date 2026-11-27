@@ -13,6 +13,12 @@ public record DayLog(DateOnly Date, IReadOnlyList<TimeEntry> Entries, double Tot
 /// </summary>
 public record WeekSummary(DateOnly WeekStart, IReadOnlyList<DayLog> Days, double WeeklyTotalHours, double WeeklyGoalHours, double RolloverInHours)
 {
+    /// <summary>Hours of one kind this week (work, PTO, holiday or sick). Together they make up WeeklyTotalHours.</summary>
+    public double HoursFor(TimeEntryKind kind) => Days.SelectMany(d => d.Entries).Where(e => e.Kind == kind).Sum(e => HoursByEntry.GetValueOrDefault(e.Id));
+
+    /// <summary>Each entry's hours as counted in the totals, keyed by entry id.</summary>
+    public IReadOnlyDictionary<int, double> HoursByEntry { get; init; } = new Dictionary<int, double>();
+
     public double WeeklyRemainingHours => WeeklyGoalHours - WeeklyTotalHours;
 
     public double OverallTotalHours => RolloverInHours + WeeklyTotalHours;
@@ -47,7 +53,7 @@ public class TimeLogService
     public async Task<TimeEntry> ClockInAsync()
     {
         TimeEntry entry = new() { Date = _clock.Today };
-        await ApplyTimesAsync(entry, _clock.TimeOfDayToMinute, null);
+        ApplyTimes(entry, _clock.TimeOfDayToMinute, null);
         _db.TimeEntries.Add(entry);
         await SaveEntryAsync(entry);
         return entry;
@@ -75,24 +81,30 @@ public class TimeLogService
             return null;
         }
 
-        await ApplyTimesAsync(open, open.StartTime, now);
+        ApplyTimes(open, open.StartTime, now);
         await SaveEntryAsync(open);
         return open;
     }
 
-    public async Task<TimeEntry> AddEntryAsync(DateOnly date, TimeOnly start, TimeOnly? end)
+    public async Task<TimeEntry> AddEntryAsync(DateOnly date, TimeOnly start, TimeOnly? end, TimeEntryKind kind = TimeEntryKind.Work)
     {
-        TimeEntry entry = new() { Date = date };
-        await ApplyTimesAsync(entry, start, end);
+        TimeEntry entry = new() { Date = date, Kind = RequireKnownKind(kind) };
+        ApplyTimes(entry, start, end);
         _db.TimeEntries.Add(entry);
         await SaveEntryAsync(entry);
         return entry;
     }
 
-    public async Task UpdateEntryAsync(int id, TimeOnly start, TimeOnly? end)
+    /// <summary>Corrects an entry's times and, when one is given, its kind; without a kind it keeps the one it has.</summary>
+    public async Task UpdateEntryAsync(int id, TimeOnly start, TimeOnly? end, TimeEntryKind? kind = null)
     {
         TimeEntry entry = await _db.TimeEntries.FindAsync(id) ?? throw new DomainRuleException("Time entry not found.");
-        await ApplyTimesAsync(entry, start, end);
+        if (kind is TimeEntryKind newKind)
+        {
+            entry.Kind = RequireKnownKind(newKind);
+        }
+
+        ApplyTimes(entry, start, end);
         await SaveEntryAsync(entry);
     }
 
@@ -132,7 +144,10 @@ public class TimeLogService
         }
 
         double rolloverIn = await GetRolloverIntoAsync(weekStart, settings);
-        return new WeekSummary(weekStart, days, days.Sum(d => d.TotalHours), settings.WeeklyGoalHours, rolloverIn);
+        return new WeekSummary(weekStart, days, days.Sum(d => d.TotalHours), settings.WeeklyGoalHours, rolloverIn)
+        {
+            HoursByEntry = entries.ToDictionary(e => e.Id, DurationHours)
+        };
     }
 
     /// <summary>
@@ -184,10 +199,11 @@ public class TimeLogService
     }
 
     /// <summary>
-    /// Validates and sets an entry's times. An entry with no end time is treated as running
-    /// to the end of its day when checking for overlap, so hours can never be counted twice.
+    /// Validates and sets an entry's times. Entries may overlap: odd working hours, and days off
+    /// with some work anyway, are both normal, and every entry counts in full. Only one entry may be
+    /// running at a time; that rule is a database index, checked in SaveEntryAsync.
     /// </summary>
-    private async Task ApplyTimesAsync(TimeEntry entry, TimeOnly start, TimeOnly? end)
+    private static void ApplyTimes(TimeEntry entry, TimeOnly start, TimeOnly? end)
     {
         TimeOnly cleanStart = new(start.Hour, start.Minute);
         TimeOnly? cleanEnd = end is TimeOnly value ? new TimeOnly(value.Hour, value.Minute) : null;
@@ -196,30 +212,13 @@ public class TimeLogService
             throw new DomainRuleException("End time must be after start time.");
         }
 
-        List<TimeEntry> sameDay = await _db.TimeEntries
-            .Where(e => e.Date == entry.Date && e.Id != entry.Id)
-            .ToListAsync();
-        foreach (TimeEntry other in sameDay)
-        {
-            if (cleanEnd is null && other.EndTime is null)
-            {
-                // Two open entries: left to the database rule in SaveEntryAsync, which gives the clearer message.
-                continue;
-            }
-
-            TimeOnly effectiveEnd = cleanEnd ?? TimeOnly.MaxValue;
-            TimeOnly otherEnd = other.EndTime ?? TimeOnly.MaxValue;
-            if (cleanStart < otherEnd && other.StartTime < effectiveEnd)
-            {
-                string otherRange = other.EndTime is TimeOnly closed
-                    ? $"{other.StartTime:HH\\:mm} to {closed:HH\\:mm}"
-                    : $"the entry running since {other.StartTime:HH\\:mm}";
-                throw new DomainRuleException($"That overlaps {otherRange} on {entry.Date:yyyy-MM-dd}.");
-            }
-        }
-
         entry.StartTime = cleanStart;
         entry.EndTime = cleanEnd;
+    }
+
+    private static TimeEntryKind RequireKnownKind(TimeEntryKind kind)
+    {
+        return Enum.IsDefined(kind) ? kind : throw new DomainRuleException("Unknown time entry type.");
     }
 
     /// <summary>

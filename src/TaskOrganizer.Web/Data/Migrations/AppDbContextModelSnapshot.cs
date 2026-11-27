@@ -305,6 +305,11 @@ namespace TaskOrganizer.Web.Data.Migrations
                     b.Property<TimeOnly?>("EndTime")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("TEXT");
 

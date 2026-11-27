@@ -196,21 +196,22 @@ public class TimeLogServiceTests
     }
 
     [Theory]
-    [InlineData(9, 0, 10, 0)]
-    [InlineData(7, 0, 8, 30)]
-    [InlineData(11, 30, 13, 0)]
-    [InlineData(7, 0, 13, 0)]
-    public async Task An_entry_that_overlaps_another_on_the_same_day_is_rejected(int startHour, int startMinute, int endHour, int endMinute)
+    [InlineData(9, 0, 10, 0, 5)]
+    [InlineData(7, 0, 8, 30, 5.5)]
+    [InlineData(11, 30, 13, 0, 5.5)]
+    [InlineData(7, 0, 13, 0, 10)]
+    public async Task Overlapping_entries_on_the_same_day_are_allowed_and_each_counts_in_full(int startHour, int startMinute, int endHour, int endMinute, double expectedDayHours)
     {
-        // Overlapping entries would count the same hour twice in the daily, weekly and rollover totals.
+        // Chris works odd hours, and on a day off he may log PTO for the day and still log the work he did;
+        // both must be recorded and both count toward the totals.
         using TestHost host = new(new DateTime(2026, 11, 19, 6, 0, 0));
         await host.TimeLog.AddEntryAsync(Monday, T(8, 0), T(12, 0));
 
-        await Assert.ThrowsAsync<DomainRuleException>(
-            () => host.TimeLog.AddEntryAsync(Monday, T(startHour, startMinute), T(endHour, endMinute)));
+        await host.TimeLog.AddEntryAsync(Monday, T(startHour, startMinute), T(endHour, endMinute));
 
         WeekSummary week = await host.TimeLog.GetWeekAsync(Monday);
-        Assert.Equal(4, week.Days[0].TotalHours, HoursPrecision);
+        Assert.Equal(2, week.Days[0].Entries.Count);
+        Assert.Equal(expectedDayHours, week.Days[0].TotalHours, HoursPrecision);
     }
 
     [Fact]
@@ -228,12 +229,67 @@ public class TimeLogServiceTests
     }
 
     [Fact]
-    public async Task A_manual_entry_cannot_be_added_on_top_of_the_running_entry()
+    public async Task A_finished_entry_can_be_logged_while_the_clock_runs_but_a_second_running_entry_cannot()
     {
+        // Overlap is fine; two clocks running at once is still a forgotten clock-in, not a way of working.
         using TestHost host = new(new DateTime(2026, 11, 16, 8, 0, 0));
         await host.TimeLog.ClockInAsync();
 
-        await Assert.ThrowsAsync<DomainRuleException>(() => host.TimeLog.AddEntryAsync(Monday, T(9, 0), T(10, 0)));
+        await host.TimeLog.AddEntryAsync(Monday, T(9, 0), T(10, 0));
+
+        await Assert.ThrowsAsync<DomainRuleException>(() => host.TimeLog.AddEntryAsync(Monday, T(11, 0), null));
+        Assert.Equal(2, await host.Db.TimeEntries.CountAsync());
+    }
+
+    [Fact]
+    public async Task A_new_entry_is_work_unless_another_type_is_chosen()
+    {
+        using TestHost host = new(new DateTime(2026, 11, 16, 8, 0, 0));
+
+        TimeEntry clocked = await host.TimeLog.ClockInAsync();
+        host.Time.Advance(TimeSpan.FromHours(1));
+        await host.TimeLog.ClockOutAsync();
+        TimeEntry typedIn = await host.TimeLog.AddEntryAsync(Monday, T(10, 0), T(11, 0));
+        TimeEntry pto = await host.TimeLog.AddEntryAsync(Monday.AddDays(1), T(9, 0), T(17, 0), TimeEntryKind.Pto);
+
+        Assert.Equal(TimeEntryKind.Work, typedIn.Kind);
+        Assert.Equal(TimeEntryKind.Pto, pto.Kind);
+        Assert.Equal(TimeEntryKind.Work, (await host.NewContext().TimeEntries.SingleAsync(e => e.Id == clocked.Id)).Kind);
+    }
+
+    [Fact]
+    public async Task Pto_holiday_and_sick_time_count_toward_the_week_and_are_shown_separately()
+    {
+        // Days off still fill the week against the goal; the breakdown shows how much of it was not work.
+        using TestHost host = new(new DateTime(2026, 11, 19, 6, 0, 0));
+        await host.TimeLog.AddEntryAsync(Monday, T(8, 0), T(16, 0), TimeEntryKind.Pto);
+        await host.TimeLog.AddEntryAsync(Monday, T(19, 0), T(21, 0));
+        await host.TimeLog.AddEntryAsync(Monday.AddDays(1), T(8, 0), T(16, 0), TimeEntryKind.Holiday);
+        await host.TimeLog.AddEntryAsync(Monday.AddDays(2), T(8, 0), T(12, 0), TimeEntryKind.Sick);
+        await host.TimeLog.AddEntryAsync(Monday.AddDays(2), T(13, 0), T(16, 0));
+
+        WeekSummary week = await host.TimeLog.GetWeekAsync(Monday);
+
+        Assert.Equal(25, week.WeeklyTotalHours, HoursPrecision);
+        Assert.Equal(15, week.WeeklyRemainingHours, HoursPrecision);
+        Assert.Equal(5, week.HoursFor(TimeEntryKind.Work), HoursPrecision);
+        Assert.Equal(8, week.HoursFor(TimeEntryKind.Pto), HoursPrecision);
+        Assert.Equal(8, week.HoursFor(TimeEntryKind.Holiday), HoursPrecision);
+        Assert.Equal(4, week.HoursFor(TimeEntryKind.Sick), HoursPrecision);
+        Assert.Equal(10, week.Days[0].TotalHours, HoursPrecision);
+    }
+
+    [Fact]
+    public async Task Correcting_an_entry_can_change_its_type_and_leaves_it_alone_when_none_is_given()
+    {
+        using TestHost host = new(new DateTime(2026, 11, 19, 6, 0, 0));
+        TimeEntry entry = await host.TimeLog.AddEntryAsync(Monday, T(8, 0), T(16, 0));
+
+        await host.TimeLog.UpdateEntryAsync(entry.Id, T(8, 0), T(16, 0), TimeEntryKind.Sick);
+        await host.TimeLog.UpdateEntryAsync(entry.Id, T(9, 0), T(16, 0));
+
+        TimeEntry saved = await host.NewContext().TimeEntries.SingleAsync();
+        Assert.Equal((TimeEntryKind.Sick, T(9, 0)), (saved.Kind, saved.StartTime));
     }
 
     [Fact]

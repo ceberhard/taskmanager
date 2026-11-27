@@ -29,6 +29,15 @@ public enum WorkTaskStatus
     DoneForToday = 5
 }
 
+/// <summary>What a span of logged time was. Every kind counts toward the daily and weekly totals.</summary>
+public enum TimeEntryKind
+{
+    Work = 0,
+    Pto = 1,
+    Holiday = 2,
+    Sick = 3
+}
+
 public enum TaskSource
 {
     Manual = 0,

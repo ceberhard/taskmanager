@@ -145,20 +145,19 @@ public class TimeLogImporterTests
     }
 
     [Fact]
-    public async Task A_span_that_overlaps_an_entry_already_in_the_app_is_skipped_and_the_rest_still_import()
+    public async Task A_span_that_overlaps_an_entry_already_in_the_app_is_imported_as_its_own_entry()
     {
-        // The app's own entry is the newer truth; the import must not double count the hour or give up on the week.
+        // Overlapping time is allowed, so the sheet's spans all come in; only the same start on the same day counts as already imported.
         using TestHost host = new(new DateTime(2026, 11, 19, 6, 0, 0));
         await host.TimeLog.AddEntryAsync(Monday, new TimeOnly(7, 30), new TimeOnly(9, 0));
         using MemoryStream workbook = BuildWorkbook();
 
         TimeImportResult result = await host.TimeImporter.ImportAsync(workbook);
 
-        Assert.Equal(2, result.EntriesCreated);
-        string warning = Assert.Single(result.Warnings);
-        Assert.Contains("Row 5", warning);
-        Assert.Contains("overlaps", warning);
-        Assert.Equal(3, await host.Db.TimeEntries.CountAsync());
+        Assert.Equal(3, result.EntriesCreated);
+        Assert.Empty(result.Warnings);
+        Assert.Equal(4, await host.Db.TimeEntries.CountAsync());
+        Assert.All(await host.Db.TimeEntries.ToListAsync(), e => Assert.Equal(TimeEntryKind.Work, e.Kind));
     }
 
     [Fact]

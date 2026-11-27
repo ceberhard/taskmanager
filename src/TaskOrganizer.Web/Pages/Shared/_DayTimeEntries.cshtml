@@ -1,12 +1,17 @@
 @model DayTimeEntriesModel
 @foreach (TimeEntry entry in Model.Day.Entries)
 {
-    <form method="post" class="d-flex flex-wrap gap-2 align-items-center mb-1">
+    <form method="post" class="d-flex flex-wrap gap-2 align-items-center mb-1 time-entry @Display.KindCss(entry.Kind)">
         <input type="hidden" name="id" value="@entry.Id" />
         <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
         <input type="time" name="start" value="@Display.TimeInput(entry.StartTime)" class="form-control form-control-sm time-input" required aria-label="Start" />
         <span>to</span>
         <input type="time" name="end" value="@Display.TimeInput(entry.EndTime)" class="form-control form-control-sm time-input" aria-label="End" />
+        <partial name="_TimeEntryKindSelect" model="entry.Kind" />
+        @if (entry.Kind != TimeEntryKind.Work)
+        {
+            <span class="badge kind-badge @Display.KindCss(entry.Kind)">@Display.Kind(entry.Kind)</span>
+        }
         @if (entry.EndTime is null)
         {
             <span class="small @(Model.IsToday ? "text-success" : "text-danger")">@(Model.IsToday ? "running" : "open: set an end time")</span>
@@ -21,5 +26,6 @@
     <input type="time" name="start" class="form-control form-control-sm time-input" required aria-label="Start" />
     <span>to</span>
     <input type="time" name="end" class="form-control form-control-sm time-input" aria-label="End" />
+    <partial name="_TimeEntryKindSelect" model="TimeEntryKind.Work" />
     <button type="submit" class="btn btn-sm btn-outline-secondary">Log time</button>
 </form>

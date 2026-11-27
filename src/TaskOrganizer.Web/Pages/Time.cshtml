@@ -31,6 +31,18 @@
         <table class="table table-sm mt-3 mt-lg-0">
             <tbody>
                 <tr><th>Weekly total</th><td class="text-end">@Display.Hours(week.WeeklyTotalHours)</td></tr>
+                @if (Display.TimeEntryKinds.Any(kind => kind != TimeEntryKind.Work && week.HoursFor(kind) > 0))
+                {
+                    <tr>
+                        <td colspan="2" class="small text-muted text-end">
+                            of which
+                            @foreach (TimeEntryKind kind in Display.TimeEntryKinds.Where(kind => kind != TimeEntryKind.Work && week.HoursFor(kind) > 0))
+                            {
+                                <span class="badge kind-badge @Display.KindCss(kind) ms-1">@Display.Kind(kind) @Display.Hours(week.HoursFor(kind))</span>
+                            }
+                        </td>
+                    </tr>
+                }
                 <tr><th>Weekly goal</th><td class="text-end">@Display.Hours(week.WeeklyGoalHours)</td></tr>
                 <tr><th>Weekly remaining</th><td class="text-end">@Display.Hours(week.WeeklyRemainingHours)</td></tr>
                 <tr><th>Rollover in</th><td class="text-end">@Display.SignedHours(week.RolloverInHours)</td></tr>

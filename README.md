@@ -62,6 +62,7 @@ dotnet.exe test
   - In edit mode each project has a "Set for all" control that fills priority and/or date into every row of that project; adjust rows, then Save.
   - "Edit priorities, dates and hours" turns every row into inputs with one Save. Ctrl+Up / Ctrl+Down moves down a column. If any row is invalid, nothing is saved.
 - While the clock is running, the time figures on every page update once a minute without reloading.
+- **Time entries** can be flagged as Work (the default), PTO, Holiday or Sick with the picker on each entry; non-work entries are coloured, count toward the daily and weekly totals, and are listed under the weekly total. Entries may overlap (odd hours, or working on a day off); each counts in full. Only one entry can be running at a time.
 - **Time** is the weekly clock-in/out log with the weekly goal, remaining hours and rollover balance.
 - **Settings** holds the daily target, weekly goal, opening rollover balance, projects, and the imports from `refs/Time_Log.xlsx`: the "Daily Punchdown" task list and the start/end times on the "Overall" sheet. The time import skips and lists rows with no end time and rows in the undated weekend block, and offers the sheet's Rollover figure as your opening balance.
 

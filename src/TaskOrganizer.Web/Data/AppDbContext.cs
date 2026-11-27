@@ -96,6 +96,7 @@ public class AppDbContext : DbContext
         // TaskFieldHistoryAndSingleOpenEntry migration; EF cannot describe an index on a constant expression.
         modelBuilder.Entity<TimeEntry>(entity =>
         {
+            entity.Property(e => e.Kind).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(e => e.Date);
         });
 

@@ -596,4 +596,33 @@ public class PageTests
         // 1 to 3 is fine, 4 to 5 a warning, 6 to 7 too many, 8 or more danger: the bands Chris chose.
         Assert.Equal(expectedLabel, TaskOrganizer.Web.Pages.Display.InProgressLevel(count).Label);
     }
+
+    [Fact]
+    public async Task Time_can_be_logged_and_corrected_as_pto_holiday_or_sick_and_stands_out_on_the_page()
+    {
+        using AppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        string today = factory.Today.ToString("yyyy-MM-dd");
+
+        await PostFormAsync(client, "/Time", "/Actions?handler=TimeAdd", new[]
+        {
+            Field("date", today), Field("start", "08:00"), Field("end", "16:00"), Field("kind", "Pto"), Field("returnUrl", "/Time")
+        });
+        await PostFormAsync(client, "/Time", "/Actions?handler=TimeAdd", new[]
+        {
+            Field("date", today), Field("start", "10:00"), Field("end", "11:00"), Field("returnUrl", "/Time")
+        });
+        TimeEntry pto = await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().TimeEntries.SingleAsync(e => e.Kind == TimeEntryKind.Pto));
+        await PostFormAsync(client, "/Time", "/Actions?handler=TimeUpdate", new[]
+        {
+            Field("id", pto.Id.ToString()), Field("start", "08:00"), Field("end", "16:00"), Field("kind", "Sick"), Field("returnUrl", "/Time")
+        });
+        string html = await client.GetStringAsync("/Time");
+
+        List<TimeEntry> saved = await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().TimeEntries.OrderBy(e => e.StartTime).ToListAsync());
+        Assert.Equal(new[] { TimeEntryKind.Sick, TimeEntryKind.Work }, saved.Select(e => e.Kind));
+        Assert.Contains("time-entry kind-sick", html);
+        Assert.Contains("Weekly total</th><td class=\"text-end\">9 h", html);
+        Assert.Contains("Sick 8 h", html);
+    }
 }
