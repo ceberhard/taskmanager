@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using TaskOrganizer.Web.Integrations;
 
 namespace TaskOrganizer.Tests;
 
@@ -27,17 +29,35 @@ public sealed partial class AppFactory : WebApplicationFactory<Program>
 
     public DateOnly Today => DateOnly.FromDateTime(Clock.GetLocalNow().DateTime);
 
+    public CapturingLoggerProvider Logs { get; } = new();
+
+    public FakeHttpHandler JiraServer { get; } = new();
+
+    public FakeHttpHandler AzureDevOpsServer { get; } = new();
+
+    /// <summary>Throwaway folder standing in for the credential folder under %LOCALAPPDATA%.</summary>
+    public string CredentialFolder => Path.Combine(_folder, "credentials");
+
+    public string DatabasePath => Path.Combine(_folder, "pages.db");
+
     /// <summary>Where a test may put a workbook for the import handlers to read.</summary>
     public string WorkbookPath => Path.Combine(_folder, "import.xlsx");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseSetting("Database:Path", Path.Combine(_folder, "pages.db"));
+        builder.UseSetting("Database:Path", DatabasePath);
         builder.UseSetting("Import:WorkbookPath", WorkbookPath);
+        builder.UseSetting("Credentials:Folder", CredentialFolder);
+        builder.UseSetting("Ui:TimeRefreshSeconds", "1");
+        builder.ConfigureLogging(logging => logging.AddProvider(Logs).SetMinimumLevel(LogLevel.Debug));
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Clock);
+
+            // The app talks to fake Jira and Azure DevOps servers, never the real ones.
+            services.AddHttpClient<JiraClient>().ConfigurePrimaryHttpMessageHandler(() => JiraServer);
+            services.AddHttpClient<AzureDevOpsClient>().ConfigurePrimaryHttpMessageHandler(() => AzureDevOpsServer);
         });
     }
 

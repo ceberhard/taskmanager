@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using TaskOrganizer.Web.Domain;
 using TaskOrganizer.Web.Pages;
 using TaskOrganizer.Web.Services;
 
 namespace TaskOrganizer.Web.ViewComponents;
 
-public record CaptureBarModel(IReadOnlyList<Project> Projects, ClockStatus Clock, string ReturnUrl, bool FocusQuickAdd, QuickAddDraft? Draft, IReadOnlyList<HoldReasonSuggestion> HoldReasons);
+public record CaptureBarModel(IReadOnlyList<Project> Projects, ClockStatus Clock, string ReturnUrl, bool FocusQuickAdd, QuickAddDraft? Draft, IReadOnlyList<HoldReasonSuggestion> HoldReasons, int TimeRefreshSeconds);
 
 /// <summary>The strip on every page: quick-add, the interruption button and the clock.</summary>
 public class CaptureBarViewComponent : ViewComponent
@@ -13,12 +14,14 @@ public class CaptureBarViewComponent : ViewComponent
     private readonly ProjectService _projects;
     private readonly TimeLogService _timeLog;
     private readonly HoldReasonService _holdReasons;
+    private readonly UiOptions _ui;
 
-    public CaptureBarViewComponent(ProjectService projects, TimeLogService timeLog, HoldReasonService holdReasons)
+    public CaptureBarViewComponent(ProjectService projects, TimeLogService timeLog, HoldReasonService holdReasons, IOptions<UiOptions> ui)
     {
         _projects = projects;
         _timeLog = timeLog;
         _holdReasons = holdReasons;
+        _ui = ui.Value;
     }
 
     public async Task<IViewComponentResult> InvokeAsync(bool focusQuickAdd)
@@ -30,6 +33,6 @@ public class CaptureBarViewComponent : ViewComponent
         // A rejected quick-add puts the cursor back in the box, whichever page it was sent from.
         // The saved hold reasons are rendered once here, for every "put on hold" box on the page to share.
         List<HoldReasonSuggestion> holdReasons = await _holdReasons.ListAsync();
-        return View(new CaptureBarModel(projects, clock, HttpContext.Request.CurrentUrl(), focusQuickAdd || draft is not null, draft, holdReasons));
+        return View(new CaptureBarModel(projects, clock, HttpContext.Request.CurrentUrl(), focusQuickAdd || draft is not null, draft, holdReasons, _ui.TimeRefreshSeconds));
     }
 }

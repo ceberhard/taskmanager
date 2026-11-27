@@ -35,8 +35,8 @@
 <section class="card mb-4" id="today-time">
     <div class="card-body py-2">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-            <h2 class="h6 mb-0">Time today: @Display.Hours(Model.TodayLog.TotalHours)</h2>
-            <span class="small text-muted">Week @Display.Hours(Model.Week.WeeklyTotalHours) of @Display.Hours(Model.Week.WeeklyGoalHours) · <a asp-page="/Time">full week</a></span>
+            <h2 class="h6 mb-0">Time today: <span data-live-time="today">@Display.Hours(Model.TodayLog.TotalHours)</span></h2>
+            <span class="small text-muted">Week <span data-live-time="week">@Display.Hours(Model.Week.WeeklyTotalHours)</span> of @Display.Hours(Model.Week.WeeklyGoalHours) · <a asp-page="/Time">full week</a></span>
             <form method="post">
                 <input type="hidden" name="returnUrl" value="@Model.TimeEntries.ReturnUrl" />
                 @if (Model.Clock.RunningEntry is not null)

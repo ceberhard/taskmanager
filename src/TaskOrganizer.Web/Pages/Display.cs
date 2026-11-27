@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Html;
 using TaskOrganizer.Web.Domain;
+using TaskOrganizer.Web.Services;
 
 namespace TaskOrganizer.Web.Pages;
 
@@ -15,20 +16,24 @@ public static partial class Display
 
     public static string PriorityCss(TaskPriority priority) => "prio-" + priority.ToString().ToLowerInvariant();
 
-    public static string Status(WorkTaskStatus status) => status switch
-    {
-        WorkTaskStatus.ToDo => "To do",
-        WorkTaskStatus.InProgress => "In progress",
-        WorkTaskStatus.OnHold => "On hold",
-        WorkTaskStatus.DoneForToday => "Done for today",
-        _ => status.ToString()
-    };
+    public static string Status(WorkTaskStatus status) => TextFormat.Status(status);
 
     /// <summary>The statuses a task can be listed under while it is not closed, in the order they are offered as filters.</summary>
     public static readonly IReadOnlyList<WorkTaskStatus> OpenStatuses = new[]
     {
         WorkTaskStatus.ToDo, WorkTaskStatus.InProgress, WorkTaskStatus.OnHold, WorkTaskStatus.DoneForToday
     };
+
+    /// <summary>What to call the link back to where a task came from.</summary>
+    public static string ExternalLinkLabel(TaskSource source) => source switch
+    {
+        TaskSource.Jira => "open in Jira",
+        TaskSource.PullRequest => "open pull request",
+        TaskSource.Slack => "open in Slack",
+        _ => "open link"
+    };
+
+    public static string Source(TaskSource source) => source == TaskSource.PullRequest ? "pull request" : source.ToString().ToLowerInvariant();
 
     /// <summary>CSS class that gives a task row the look of its state.</summary>
     public static string StateCss(WorkTaskStatus status) => status switch
@@ -52,7 +57,7 @@ public static partial class Display
         _ => ("Danger", "text-bg-danger")
     };
 
-    public static string Hours(double hours) => hours.ToString("0.##", CultureInfo.InvariantCulture) + " h";
+    public static string Hours(double hours) => TextFormat.Hours(hours);
 
     public static string SignedHours(double hours) => hours.ToString("+0.##;-0.##;0", CultureInfo.InvariantCulture) + " h";
 

@@ -36,5 +36,6 @@ public enum TaskSource
     Jira = 2,
     Meeting = 3,
     Interruption = 4,
-    Import = 5
+    Import = 5,
+    PullRequest = 6
 }

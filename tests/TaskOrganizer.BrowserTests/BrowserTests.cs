@@ -536,4 +536,46 @@ public class BrowserTests : IClassFixture<BrowserFixture>
         await Expect(session.TaskRow("Duplicate entry")).ToHaveCountAsync(0);
         Assert.Equal("Real task", Assert.Single(await SavedTasksAsync(session)).Title);
     }
+
+    [Fact]
+    public async Task Interruption_takes_what_is_typed_in_quick_add_and_works_with_nothing_typed()
+    {
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+        await AddProjectAsync(session, "Support");
+        await page.GotoAsync("/");
+
+        await page.Locator("#quick-title").FillAsync("Export the report for Sam");
+        await page.GetByLabel("Project", new PageGetByLabelOptions { Exact = true }).First.SelectOptionAsync(new SelectOptionValue { Label = "Support" });
+        await page.GetByLabel("Priority", new PageGetByLabelOptions { Exact = true }).First.SelectOptionAsync("Critical");
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Interruption" }).ClickAsync();
+
+        ILocator typed = session.TaskRow("Export the report for Sam");
+        await Expect(typed).ToContainTextAsync("Support");
+        await Expect(typed).ToContainTextAsync("Critical");
+        await Expect(typed).ToContainTextAsync("interruption");
+        await Expect(page.Locator("#quick-title")).ToHaveValueAsync(string.Empty);
+
+        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Interruption" }).ClickAsync();
+        await Expect(session.TaskRow("Interruption at 10:00")).ToBeVisibleAsync();
+    }
+
+    [Fact]
+    public async Task While_the_clock_runs_the_time_figures_move_on_without_reloading_the_page()
+    {
+        // A reload would lose anything half-typed, so only the figures are refreshed.
+        await using AppSession session = await AppSession.StartAsync(_browser.Browser);
+        IPage page = session.Page;
+        ILocator timeHeading = page.Locator("#today-time").GetByRole(AriaRole.Heading);
+        await page.GotoAsync("/");
+        await page.Locator("#today-time").GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Start" }).ClickAsync();
+        await Expect(timeHeading).ToHaveTextAsync("Time today: 0 h");
+        await page.Locator("#quick-title").FillAsync("Half-typed task");
+
+        session.App.Clock.Advance(TimeSpan.FromMinutes(90));
+
+        await Expect(timeHeading).ToHaveTextAsync("Time today: 1.5 h", new LocatorAssertionsToHaveTextOptions { Timeout = 10000 });
+        await Expect(page.Locator("#capture-bar [data-live-time='today']")).ToHaveTextAsync("1.5 h");
+        await Expect(page.Locator("#quick-title")).ToHaveValueAsync("Half-typed task");
+    }
 }

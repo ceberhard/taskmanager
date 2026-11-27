@@ -55,6 +55,116 @@
     </form>
 </section>
 
+<section class="mb-4" id="integrations">
+    <h2 class="h5">Integrations</h2>
+    <p class="small text-muted mb-2">
+        Tokens are encrypted for this Windows user and kept outside the app and its database, in <code>@Model.CredentialFolder</code>.
+        They are never shown again; leave a token box empty to keep the saved one. Both integrations only read: nothing is ever changed in Jira or Azure DevOps.
+    </p>
+
+    <h3 class="h6 mt-3">Jira</h3>
+    <form method="post" asp-page-handler="SaveJira" class="row g-2 align-items-end" style="max-width: 52rem">
+        <div class="col-sm-5">
+            <label class="form-label small" for="jiraSiteUrl">Site address</label>
+            <input id="jiraSiteUrl" name="jiraSiteUrl" value="@current.JiraSiteUrl" class="form-control form-control-sm" placeholder="https://yourcompany.atlassian.net" required />
+        </div>
+        <div class="col-sm-3">
+            <label class="form-label small" for="jiraEmail">Your Jira email</label>
+            <input id="jiraEmail" name="jiraEmail" type="email" value="@current.JiraEmail" class="form-control form-control-sm" required />
+        </div>
+        <div class="col-sm-4">
+            <label class="form-label small" for="jiraApiToken">API token @(Model.HasJiraToken ? "(saved)" : "(not set)")</label>
+            <input id="jiraApiToken" name="jiraApiToken" type="password" class="form-control form-control-sm" autocomplete="off"
+                   placeholder="@(Model.HasJiraToken ? "leave empty to keep" : "paste token")" />
+        </div>
+        <div class="col-12 d-flex flex-wrap gap-2">
+            <button type="submit" class="btn btn-sm btn-primary">Save Jira</button>
+            <button type="submit" asp-page-handler="TestJira" formnovalidate class="btn btn-sm btn-outline-secondary">Test connection</button>
+            @if (Model.HasJiraToken)
+            {
+                <button type="submit" asp-page-handler="RemoveJiraToken" formnovalidate class="btn btn-sm btn-outline-danger">Remove token</button>
+            }
+        </div>
+    </form>
+    <p class="small text-muted mt-1 mb-2">Create a token at id.atlassian.com, under Security, API tokens.</p>
+
+    <div class="mb-3" style="max-width: 36rem">
+        <div class="small fw-semibold mb-1">Ticket prefix to project</div>
+        @foreach (JiraProjectMapping mapping in Model.JiraMappings)
+        {
+            <form method="post" asp-page-handler="RemoveJiraMapping" class="d-flex gap-2 align-items-center mb-1">
+                <input type="hidden" name="id" value="@mapping.Id" />
+                <span class="flex-grow-1"><strong>@mapping.Prefix</strong> → @mapping.Project?.Name</span>
+                <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Remove mapping @mapping.Prefix">Remove</button>
+            </form>
+        }
+        <form method="post" asp-page-handler="AddJiraMapping" class="d-flex gap-2 mt-1">
+            <input name="prefix" class="form-control form-control-sm w-auto" placeholder="ROC" maxlength="20" required aria-label="Jira prefix" />
+            <select name="projectId" class="form-select form-select-sm w-auto" aria-label="Project for this prefix" required>
+                @foreach (Project project in Model.Projects)
+                {
+                    <option value="@project.Id">@project.Name</option>
+                }
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Add</button>
+        </form>
+        <div class="form-text">Tickets with a prefix not listed here go to Unfiled.</div>
+    </div>
+
+    <h3 class="h6 mt-3">Azure DevOps pull requests</h3>
+    <form method="post" asp-page-handler="SaveAzureDevOps" class="row g-2 align-items-end" style="max-width: 52rem">
+        <div class="col-sm-5">
+            <label class="form-label small" for="azureDevOpsOrganizationUrl">Organisation address</label>
+            <input id="azureDevOpsOrganizationUrl" name="azureDevOpsOrganizationUrl" value="@current.AzureDevOpsOrganizationUrl" class="form-control form-control-sm" placeholder="https://dev.azure.com/yourorganisation" required />
+        </div>
+        <div class="col-sm-3">
+            <label class="form-label small" for="azureDevOpsProject">Project (optional)</label>
+            <input id="azureDevOpsProject" name="azureDevOpsProject" value="@current.AzureDevOpsProject" class="form-control form-control-sm" />
+        </div>
+        <div class="col-sm-4">
+            <label class="form-label small" for="azureDevOpsToken">Personal access token @(Model.HasAzureDevOpsToken ? "(saved)" : "(not set)")</label>
+            <input id="azureDevOpsToken" name="azureDevOpsToken" type="password" class="form-control form-control-sm" autocomplete="off"
+                   placeholder="@(Model.HasAzureDevOpsToken ? "leave empty to keep" : "paste token")" />
+        </div>
+        <div class="col-12 d-flex flex-wrap gap-2">
+            <button type="submit" class="btn btn-sm btn-primary">Save Azure DevOps</button>
+            <button type="submit" asp-page-handler="TestAzureDevOps" formnovalidate class="btn btn-sm btn-outline-secondary">Test connection</button>
+            @if (Model.HasAzureDevOpsToken)
+            {
+                <button type="submit" asp-page-handler="RemoveAzureDevOpsToken" formnovalidate class="btn btn-sm btn-outline-danger">Remove token</button>
+            }
+        </div>
+    </form>
+    <p class="small text-muted mt-1 mb-2">Create the token in Azure DevOps under User settings, Personal access tokens, with the Code (Read) scope only.</p>
+
+    <form method="post" asp-page-handler="SavePullRequestDefaults" class="d-flex flex-wrap gap-2 align-items-end" style="max-width: 52rem">
+        <div>
+            <label class="form-label small" for="pullRequestProjectId">Pull request tasks go under</label>
+            <select id="pullRequestProjectId" name="pullRequestProjectId" class="form-select form-select-sm">
+                <option value="">Unfiled</option>
+                @foreach (Project project in Model.Projects)
+                {
+                    <option value="@project.Id" selected="@(project.Id == current.PullRequestProjectId)">@project.Name</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label small" for="pullRequestDefaultHours">Size (hours)</label>
+            <input id="pullRequestDefaultHours" name="pullRequestDefaultHours" type="number" min="0.25" step="0.25" value="@Display.NumberInput(current.PullRequestDefaultHours)" class="form-control form-control-sm hours-input" required />
+        </div>
+        <div>
+            <label class="form-label small" for="pullRequestDefaultPriority">Priority</label>
+            <select id="pullRequestDefaultPriority" name="pullRequestDefaultPriority" class="form-select form-select-sm">
+                @foreach (TaskPriority priority in Display.Priorities)
+                {
+                    <option value="@priority" selected="@(priority == current.PullRequestDefaultPriority)">@Display.Priority(priority)</option>
+                }
+            </select>
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Save defaults</button>
+    </form>
+</section>
+
 <section class="mb-4" id="hold-reason-settings">
     <h2 class="h5">Hold reasons</h2>
     <p class="small text-muted mb-2">Offered while you type why a task is on hold. You can always type something else; removing one here does not change tasks already on hold.</p>

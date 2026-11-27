@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using TaskOrganizer.Web.Domain;
+using TaskOrganizer.Web.Integrations;
 using TaskOrganizer.Web.Services;
 
 namespace TaskOrganizer.Web.Pages;
@@ -13,16 +14,24 @@ public class SettingsModel : ActionPageModel
     private readonly PunchdownImporter _importer;
     private readonly TimeLogImporter _timeImporter;
     private readonly HoldReasonService _holdReasons;
+    private readonly IntegrationSettingsService _integrations;
+    private readonly JiraClient _jira;
+    private readonly AzureDevOpsClient _azureDevOps;
+    private readonly string _credentialFolder;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
 
-    public SettingsModel(SettingsService settings, ProjectService projects, PunchdownImporter importer, TimeLogImporter timeImporter, HoldReasonService holdReasons, IConfiguration configuration, IWebHostEnvironment environment)
+    public SettingsModel(SettingsService settings, ProjectService projects, PunchdownImporter importer, TimeLogImporter timeImporter, HoldReasonService holdReasons, IntegrationSettingsService integrations, JiraClient jira, AzureDevOpsClient azureDevOps, CredentialStore credentials, IConfiguration configuration, IWebHostEnvironment environment)
     {
         _settings = settings;
         _projects = projects;
         _importer = importer;
         _timeImporter = timeImporter;
         _holdReasons = holdReasons;
+        _integrations = integrations;
+        _jira = jira;
+        _azureDevOps = azureDevOps;
+        _credentialFolder = credentials.Folder;
         _configuration = configuration;
         _environment = environment;
     }
@@ -35,6 +44,10 @@ public class SettingsModel : ActionPageModel
     public double? OfferedRolloverHours { get; private set; }
     public IReadOnlyList<Project> Projects { get; private set; } = Array.Empty<Project>();
     public IReadOnlyList<HoldReasonSuggestion> HoldReasons { get; private set; } = Array.Empty<HoldReasonSuggestion>();
+    public IReadOnlyList<JiraProjectMapping> JiraMappings { get; private set; } = Array.Empty<JiraProjectMapping>();
+    public bool HasJiraToken { get; private set; }
+    public bool HasAzureDevOpsToken { get; private set; }
+    public string CredentialFolder => _credentialFolder;
 
     public string WorkbookPath => Path.GetFullPath(
         _configuration["Import:WorkbookPath"] ?? "../../refs/Time_Log.xlsx",
@@ -45,6 +58,9 @@ public class SettingsModel : ActionPageModel
         Current = await _settings.GetAsync();
         Projects = await _projects.ListAsync();
         HoldReasons = await _holdReasons.ListAsync();
+        JiraMappings = await _integrations.ListMappingsAsync();
+        HasJiraToken = _integrations.HasJiraToken;
+        HasAzureDevOpsToken = _integrations.HasAzureDevOpsToken;
         if (TempData[RolloverOfferKey] is string offered
             && double.TryParse(offered, NumberStyles.Float, CultureInfo.InvariantCulture, out double hours))
         {
@@ -67,6 +83,79 @@ public class SettingsModel : ActionPageModel
         {
             await _settings.UpdateSuggestionSettingsAsync(focusSharePercent, assumedUnsizedHours, dueSoonWorkingDays);
             return "Suggestion settings saved.";
+        });
+    }
+
+    public Task<IActionResult> OnPostSaveJiraAsync(string? jiraSiteUrl, string? jiraEmail, string? jiraApiToken)
+    {
+        return RunAsync(async () =>
+        {
+            await _integrations.SaveJiraAsync(jiraSiteUrl, jiraEmail, jiraApiToken);
+            return "Jira settings saved.";
+        });
+    }
+
+    public Task<IActionResult> OnPostTestJiraAsync()
+    {
+        return RunAsync(async () => $"Jira works: signed in as {await _jira.TestAsync(await _integrations.GetJiraConnectionAsync())}.");
+    }
+
+    public Task<IActionResult> OnPostRemoveJiraTokenAsync()
+    {
+        return RunAsync(() =>
+        {
+            _integrations.RemoveToken(CredentialStore.JiraApiToken);
+            return Task.FromResult("Jira API token removed from this machine.");
+        });
+    }
+
+    public Task<IActionResult> OnPostAddJiraMappingAsync(string? prefix, int projectId)
+    {
+        return RunAsync(async () =>
+        {
+            await _integrations.AddMappingAsync(prefix, projectId);
+            return "Mapping added.";
+        });
+    }
+
+    public Task<IActionResult> OnPostRemoveJiraMappingAsync(int id)
+    {
+        return RunAsync(async () =>
+        {
+            await _integrations.RemoveMappingAsync(id);
+            return "Mapping removed.";
+        });
+    }
+
+    public Task<IActionResult> OnPostSaveAzureDevOpsAsync(string? azureDevOpsOrganizationUrl, string? azureDevOpsProject, string? azureDevOpsToken)
+    {
+        return RunAsync(async () =>
+        {
+            await _integrations.SaveAzureDevOpsAsync(azureDevOpsOrganizationUrl, azureDevOpsProject, azureDevOpsToken);
+            return "Azure DevOps settings saved.";
+        });
+    }
+
+    public Task<IActionResult> OnPostTestAzureDevOpsAsync()
+    {
+        return RunAsync(async () => $"Azure DevOps works: signed in as {await _azureDevOps.TestAsync(await _integrations.GetAzureDevOpsConnectionAsync())}.");
+    }
+
+    public Task<IActionResult> OnPostRemoveAzureDevOpsTokenAsync()
+    {
+        return RunAsync(() =>
+        {
+            _integrations.RemoveToken(CredentialStore.AzureDevOpsToken);
+            return Task.FromResult("Azure DevOps token removed from this machine.");
+        });
+    }
+
+    public Task<IActionResult> OnPostSavePullRequestDefaultsAsync(int? pullRequestProjectId, double pullRequestDefaultHours, TaskPriority pullRequestDefaultPriority)
+    {
+        return RunAsync(async () =>
+        {
+            await _integrations.SavePullRequestDefaultsAsync(pullRequestProjectId, pullRequestDefaultHours, pullRequestDefaultPriority);
+            return "Pull request defaults saved.";
         });
     }
 

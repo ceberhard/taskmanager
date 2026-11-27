@@ -86,7 +86,7 @@ public class PageTests
 
         string html = await response.Content.ReadAsStringAsync();
         Assert.Equal("/", response.RequestMessage!.RequestUri!.AbsolutePath);
-        Assert.Contains("Time today: 1.5 h", html);
+        Assert.Contains("Time today: <span data-live-time=\"today\">1.5 h</span>", html);
         TimeEntry saved = await factory.WithServicesAsync(services => services.GetRequiredService<AppDbContext>().TimeEntries.SingleAsync());
         Assert.Equal(new TimeOnly(9, 30), saved.EndTime);
     }

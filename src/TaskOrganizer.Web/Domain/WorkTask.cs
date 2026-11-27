@@ -24,7 +24,13 @@ public class WorkTask
     /// <summary>The day this task is planned for. Null means it sits in the backlog only.</summary>
     public DateOnly? PlannedFor { get; set; }
 
-    /// <summary>Identifies the spreadsheet row a task came from, so re-running the import adds nothing.</summary>
+    /// <summary>Where the task came from outside the app (a Jira ticket, pull request or Slack message), as a web link.</summary>
+    public string? ExternalUrl { get; set; }
+
+    /// <summary>
+    /// Identifies the outside item a task came from (a spreadsheet row, "jira:ROC-123",
+    /// "ado-pr:26512", "slack:C123/1700000000.123"), so the same item never becomes two tasks.
+    /// </summary>
     public string? ImportKey { get; set; }
 
     /// <summary>Why the task is on hold, in the person's own words. Null unless the status is OnHold.</summary>

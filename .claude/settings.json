@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(slack-capture)",
+      "mcp__claude_ai_Slack__slack_search_public_and_private",
+      "mcp__claude_ai_Slack__slack_read_thread",
+      "Bash(python3 -I .claude/skills/slack-capture/scripts/send_task.py:*)",
+      "Bash(date:*)"
+    ]
+  }
+}

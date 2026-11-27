@@ -45,3 +45,4 @@ html { font-size: 15px; }
 details.project-group > summary { cursor: pointer; }
 .edit-cell { width: 11rem; }
 .edit-cell-narrow { width: 6.5rem; }
+.fetch-input { flex: 1 1 22rem; max-width: 40rem; }

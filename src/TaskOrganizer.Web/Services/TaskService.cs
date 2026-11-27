@@ -18,14 +18,16 @@ public class TaskService
         _settings = settings;
     }
 
-    public async Task<WorkTask> AddAsync(TaskDetails details, TaskSource source = TaskSource.Manual, bool planForToday = false)
+    public async Task<WorkTask> AddAsync(TaskDetails details, TaskSource source = TaskSource.Manual, bool planForToday = false, string? importKey = null, string? externalUrl = null)
     {
         WorkTask task = new()
         {
             Source = source,
             Status = WorkTaskStatus.ToDo,
             CreatedAtUtc = _clock.UtcNow,
-            PlannedFor = planForToday ? _clock.Today : null
+            PlannedFor = planForToday ? _clock.Today : null,
+            ImportKey = importKey,
+            ExternalUrl = externalUrl
         };
         await ApplyDetailsAsync(task, details, recordChanges: false);
 
@@ -42,11 +44,17 @@ public class TaskService
     /// </summary>
     public async Task<WorkTask> AddInterruptionAsync(string? title = null)
     {
-        string effectiveTitle = string.IsNullOrWhiteSpace(title)
-            ? $"Interruption at {_clock.LocalNow:HH:mm}"
-            : title;
-        TaskDetails details = new(effectiveTitle, null, TaskPriority.Medium, null, null);
-        return await AddAsync(details, TaskSource.Interruption, planForToday: true);
+        return await AddInterruptionAsync(new TaskDetails(title, null, TaskPriority.Medium, null, null));
+    }
+
+    /// <summary>
+    /// Records an interruption using whatever was typed into quick-add. Only the title gets a
+    /// default ("Interruption at HH:mm"), so one click with nothing typed still works.
+    /// </summary>
+    public async Task<WorkTask> AddInterruptionAsync(TaskDetails typed)
+    {
+        string title = string.IsNullOrWhiteSpace(typed.Title) ? $"Interruption at {_clock.LocalNow:HH:mm}" : typed.Title;
+        return await AddAsync(typed with { Title = title }, TaskSource.Interruption, planForToday: true);
     }
 
     public async Task UpdateDetailsAsync(int id, TaskDetails details)

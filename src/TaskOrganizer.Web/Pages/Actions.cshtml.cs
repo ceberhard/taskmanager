@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using TaskOrganizer.Web.Domain;
+using TaskOrganizer.Web.Integrations;
 using TaskOrganizer.Web.Services;
 
 namespace TaskOrganizer.Web.Pages;
@@ -14,11 +15,13 @@ public class ActionsModel : ActionPageModel
 {
     private readonly TaskService _tasks;
     private readonly TimeLogService _timeLog;
+    private readonly ReferenceImportService _references;
 
-    public ActionsModel(TaskService tasks, TimeLogService timeLog)
+    public ActionsModel(TaskService tasks, TimeLogService timeLog, ReferenceImportService references)
     {
         _tasks = tasks;
         _timeLog = timeLog;
+        _references = references;
     }
 
     [BindProperty]
@@ -30,16 +33,65 @@ public class ActionsModel : ActionPageModel
     /// Quick-add. Unlike the other actions, a rejected submission is reported beside the
     /// quick-add box with the typed values put back, so nothing has to be entered twice.
     /// </summary>
-    public async Task<IActionResult> OnPostAddAsync(string? title, int? projectId, TaskPriority priority, DateOnly? dueDate, double? estimateHours, bool planForToday)
+    public Task<IActionResult> OnPostAddAsync(string? title, int? projectId, TaskPriority priority, DateOnly? dueDate, double? estimateHours, bool planForToday)
+    {
+        TaskDetails details = new(title, projectId, priority == 0 ? TaskPriority.Medium : priority, dueDate, estimateHours);
+        return AddFromQuickAddAsync(async () =>
+        {
+            WorkTask task = await _tasks.AddAsync(details, TaskSource.Manual, planForToday);
+            return $"Added: {task.Title}";
+        });
+    }
+
+    /// <summary>The Interruption button in the quick-add form: uses whatever was typed, always planned for today.</summary>
+    public Task<IActionResult> OnPostInterruptAsync(string? title, int? projectId, TaskPriority priority, DateOnly? dueDate, double? estimateHours)
+    {
+        TaskDetails details = new(title, projectId, priority == 0 ? TaskPriority.Medium : priority, dueDate, estimateHours);
+        return AddFromQuickAddAsync(async () =>
+        {
+            WorkTask task = await _tasks.AddInterruptionAsync(details);
+            return string.IsNullOrWhiteSpace(title)
+                ? $"{task.Title} logged and added to Today. Rename it when you have a moment."
+                : $"Interruption logged and added to Today: {task.Title}";
+        });
+    }
+
+    /// <summary>The "Jira key or PR number" box: each reference typed becomes a task, or says why not.</summary>
+    public async Task<IActionResult> OnPostFetchAsync(string? reference)
+    {
+        List<ReferenceOutcome> outcomes = new();
+        bool ran = await TryRunAsync(async () =>
+        {
+            outcomes = await _references.ImportAsync(reference);
+            return null;
+        });
+
+        if (ran)
+        {
+            string summary = string.Join(" ", outcomes.Select(o => o.Message));
+
+            // Nothing added is shown as a problem, so it is not mistaken for success.
+            if (outcomes.Any(o => o.Created))
+            {
+                TempData["Flash"] = summary;
+            }
+            else
+            {
+                ShowError(summary);
+            }
+        }
+
+        return RedirectBack();
+    }
+
+    private async Task<IActionResult> AddFromQuickAddAsync(Func<Task<string>> add)
     {
         string? problem = InputProblem();
         if (problem is null)
         {
             try
             {
-                TaskDetails details = new(title, projectId, priority == 0 ? TaskPriority.Medium : priority, dueDate, estimateHours);
-                WorkTask task = await _tasks.AddAsync(details, TaskSource.Manual, planForToday);
-                TempData["Flash"] = $"Added: {task.Title}";
+                TempData["Flash"] = await add();
             }
             catch (DomainRuleException ex)
             {
@@ -53,15 +105,6 @@ public class ActionsModel : ActionPageModel
         }
 
         return RedirectBack();
-    }
-
-    public Task<IActionResult> OnPostInterruptAsync()
-    {
-        return RunAsync(async () =>
-        {
-            WorkTask task = await _tasks.AddInterruptionAsync();
-            return $"{task.Title} logged and added to Today. Rename it when you have a moment.";
-        });
     }
 
     public Task<IActionResult> OnPostEditAsync(int id, string? title, int? projectId, TaskPriority priority, DateOnly? dueDate, double? estimateHours)

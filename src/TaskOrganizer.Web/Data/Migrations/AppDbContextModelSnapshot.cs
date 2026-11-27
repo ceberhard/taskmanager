@@ -25,6 +25,14 @@ namespace TaskOrganizer.Web.Data.Migrations
                     b.Property<double>("AssumedUnsizedHours")
                         .HasColumnType("REAL");
 
+                    b.Property<string>("AzureDevOpsOrganizationUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AzureDevOpsProject")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("DailyPlanTargetHours")
                         .HasColumnType("REAL");
 
@@ -34,8 +42,27 @@ namespace TaskOrganizer.Web.Data.Migrations
                     b.Property<int>("FocusSharePercent")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("JiraEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("JiraSiteUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("OpeningRolloverHours")
                         .HasColumnType("REAL");
+
+                    b.Property<double>("PullRequestDefaultHours")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("PullRequestDefaultPriority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PullRequestProjectId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateOnly?>("RolloverStartDate")
                         .HasColumnType("TEXT");
@@ -56,6 +83,8 @@ namespace TaskOrganizer.Web.Data.Migrations
                             DueSoonWorkingDays = 3,
                             FocusSharePercent = 70,
                             OpeningRolloverHours = 0.0,
+                            PullRequestDefaultHours = 0.5,
+                            PullRequestDefaultPriority = "High",
                             WeeklyGoalHours = 40.0
                         });
                 });
@@ -147,6 +176,31 @@ namespace TaskOrganizer.Web.Data.Migrations
                             Id = 3,
                             Text = "AWAITING FEEDBACK"
                         });
+                });
+
+            modelBuilder.Entity("TaskOrganizer.Web.Domain.JiraProjectMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Prefix")
+                        .IsUnique();
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("JiraProjectMappings");
                 });
 
             modelBuilder.Entity("TaskOrganizer.Web.Domain.Project", b =>
@@ -288,6 +342,10 @@ namespace TaskOrganizer.Web.Data.Migrations
                     b.Property<double?>("EstimateHours")
                         .HasColumnType("REAL");
 
+                    b.Property<string>("ExternalUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateOnly?>("HoldCheckBackOn")
                         .HasColumnType("TEXT");
 
@@ -350,6 +408,17 @@ namespace TaskOrganizer.Web.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("DayPlan");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("TaskOrganizer.Web.Domain.JiraProjectMapping", b =>
+                {
+                    b.HasOne("TaskOrganizer.Web.Domain.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Project");
                 });

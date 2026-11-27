@@ -24,4 +24,25 @@ public class AppSettings
 
     /// <summary>A task due within this many working days is pulled forward in a suggestion.</summary>
     public int DueSoonWorkingDays { get; set; } = 3;
+
+    // Integrations. Addresses and the sign-in email are kept here; tokens never are (see CredentialStore).
+
+    /// <summary>Jira Cloud site, for example https://yourcompany.atlassian.net.</summary>
+    public string? JiraSiteUrl { get; set; }
+
+    /// <summary>The email address the Jira API token belongs to.</summary>
+    public string? JiraEmail { get; set; }
+
+    /// <summary>Azure DevOps organisation, for example https://dev.azure.com/yourorganisation.</summary>
+    public string? AzureDevOpsOrganizationUrl { get; set; }
+
+    /// <summary>Optional Azure DevOps project name, if pull requests are not found at organisation level.</summary>
+    public string? AzureDevOpsProject { get; set; }
+
+    /// <summary>Project that pull request tasks are filed under. Null means Unfiled.</summary>
+    public int? PullRequestProjectId { get; set; }
+
+    public double PullRequestDefaultHours { get; set; } = 0.5;
+
+    public TaskPriority PullRequestDefaultPriority { get; set; } = TaskPriority.High;
 }

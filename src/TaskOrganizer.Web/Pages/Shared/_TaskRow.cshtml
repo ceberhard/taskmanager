@@ -45,7 +45,11 @@
                 }
                 @if (task.Source != TaskSource.Manual)
                 {
-                    <span> · @task.Source.ToString().ToLowerInvariant()</span>
+                    <span> · @Display.Source(task.Source)</span>
+                }
+                @if (task.ExternalUrl is not null)
+                {
+                    <span> · <a href="@task.ExternalUrl" target="_blank" rel="noopener noreferrer" class="external-link">@Display.ExternalLinkLabel(task.Source)</a></span>
                 }
                 @if (task.IsWorkable && Model.IsPlannedToday)
                 {

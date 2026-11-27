@@ -6,7 +6,8 @@
     string selectedPriority = draft?.Priority ?? TaskPriority.Medium.ToString();
 }
 
-<div class="capture-bar border-bottom bg-light py-2 mb-3">
+<div class="capture-bar border-bottom bg-light py-2 mb-3" id="capture-bar"
+     data-time-refresh-seconds="@(Model.Clock.RunningEntry is null ? 0 : Model.TimeRefreshSeconds)">
     <div class="container d-flex flex-wrap gap-2 align-items-center">
         <form method="post" asp-page="/Actions" asp-page-handler="Add" class="d-flex flex-wrap gap-2 flex-grow-1 align-items-center">
             <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
@@ -31,22 +32,20 @@
             <input type="number" name="estimateHours" value="@draft?.EstimateHours" class="form-control form-control-sm hours-input" min="0.25" step="0.25" placeholder="hrs" aria-label="Rough size in hours" title="Rough size in hours" />
             <label class="form-check-label small text-nowrap"><input type="checkbox" name="planForToday" value="true" class="form-check-input" checked="@(draft?.PlanForToday == true)" /> today</label>
             <button type="submit" class="btn btn-sm btn-primary">Add</button>
+            @* Same form, so an interruption takes whatever was typed; with nothing typed it is a timestamped placeholder. *@
+            <button type="submit" asp-page="/Actions" asp-page-handler="Interrupt" formnovalidate class="btn btn-sm btn-warning" accesskey="i"
+                    title="Log an interruption now, using anything typed in these fields (Alt+I)">Interruption</button>
             @if (draft is not null)
             {
                 <div id="quick-add-error" class="w-100 text-danger small fw-semibold" role="alert">Not added: @draft.Error</div>
             }
         </form>
 
-        <form method="post" asp-page="/Actions" asp-page-handler="Interrupt">
-            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
-            <button type="submit" class="btn btn-sm btn-warning" accesskey="i" title="Log an interruption now (Alt+I)">Interruption</button>
-        </form>
-
         <form method="post" asp-page="/Actions" class="d-flex gap-2 align-items-center">
             <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
             @if (Model.Clock.RunningEntry is not null)
             {
-                <span class="small text-success text-nowrap">In since @Display.TimeInput(Model.Clock.RunningEntry.StartTime) · @Display.Hours(Model.Clock.TodayHours)</span>
+                <span class="small text-success text-nowrap">In since @Display.TimeInput(Model.Clock.RunningEntry.StartTime) · <span data-live-time="today">@Display.Hours(Model.Clock.TodayHours)</span></span>
                 <button type="submit" asp-page="/Actions" asp-page-handler="ClockOut" class="btn btn-sm btn-outline-secondary">Clock out</button>
             }
             else if (Model.Clock.StaleOpenEntry is not null)
@@ -55,9 +54,17 @@
             }
             else
             {
-                <span class="small text-muted text-nowrap">@Display.Hours(Model.Clock.TodayHours) today</span>
+                <span class="small text-muted text-nowrap"><span data-live-time="today">@Display.Hours(Model.Clock.TodayHours)</span> today</span>
                 <button type="submit" asp-page="/Actions" asp-page-handler="ClockIn" class="btn btn-sm btn-outline-success">Clock in</button>
             }
+        </form>
+    </div>
+    <div class="container mt-2">
+        <form method="post" asp-page="/Actions" asp-page-handler="Fetch" class="d-flex flex-wrap gap-2 align-items-center" id="fetch-form">
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <input name="reference" class="form-control form-control-sm fetch-input" required maxlength="2000" autocomplete="off"
+                   placeholder="Jira key or PR number, e.g. ROC-4698 or 26512 (several allowed, or paste a link)" aria-label="Jira key or PR number" />
+            <button type="submit" class="btn btn-sm btn-outline-primary">Add from Jira / PR</button>
         </form>
     </div>
 </div>

@@ -35,8 +35,8 @@ dotnet.exe test
 
 ## Using it
 
+- **Interruption** (beside Add, or `Alt+I`) uses whatever is typed in the quick-add fields; with nothing typed it logs "Interruption at HH:mm" in Today.
 - **Quick-add** is at the top of every page. Press `/` to jump to it, type a title, press Enter. Project, priority, expected delivery date, size in hours and "today" are optional. If it is rejected, the reason appears under the box and what you typed is kept.
-- **Interruption** (or `Alt+I`) logs an interruption now and puts it in Today. Rename it afterwards.
 - **Task states.** A task is To do, In progress, On hold, Done for today, Done or Dropped.
   - **In progress** rows are blue with a badge. Today shows how many are in progress at once: 1 to 3 OK, 4 to 5 Warning, 6 to 7 Too many, 8 or more Danger.
   - **On hold** parks a task with a reason in your own words (under "Edit, hold, more" on any task), with an optional check-back date. It is left out of planned hours and suggestions. When the check-back day arrives it appears under "Follow up" at the top of Today and of Suggest tasks. Saved reasons are offered as you type and are managed in Settings.
@@ -61,8 +61,22 @@ dotnet.exe test
   - Filter by status as well (To do, In progress, On hold, Done for today).
   - In edit mode each project has a "Set for all" control that fills priority and/or date into every row of that project; adjust rows, then Save.
   - "Edit priorities, dates and hours" turns every row into inputs with one Save. Ctrl+Up / Ctrl+Down moves down a column. If any row is invalid, nothing is saved.
+- While the clock is running, the time figures on every page update once a minute without reloading.
 - **Time** is the weekly clock-in/out log with the weekly goal, remaining hours and rollover balance.
 - **Settings** holds the daily target, weekly goal, opening rollover balance, projects, and the imports from `refs/Time_Log.xlsx`: the "Daily Punchdown" task list and the start/end times on the "Overall" sheet. The time import skips and lists rows with no end time and rows in the undated weekend block, and offers the sheet's Rollover figure as your opening balance.
+
+## Integrations
+
+All three only read from the outside service; nothing is ever changed in Jira, Azure DevOps or Slack.
+
+- **Jira and pull requests.** Type one or more Jira keys or pull request numbers (or paste their links) in the "Jira key or PR number" box under quick-add, on any page.
+  - A Jira ticket becomes `ROC-4698: <summary>` with the ticket's due date, filed under the project its prefix is mapped to (Settings, "Ticket prefix to project"; unmapped goes to Unfiled).
+  - A pull request becomes `PR 26512 - <author first name> - <title>`, 0.5 h, High, under the project chosen in Settings.
+  - The same ticket or pull request is never added twice; each task links back to it.
+  - Set-up, in Settings under Integrations: the Jira site address (https://yourcompany.atlassian.net), your Jira email and an API token from id.atlassian.com (Security, API tokens); the Azure DevOps organisation address (https://dev.azure.com/yourorganisation) and a personal access token with the Code (Read) scope only. "Test connection" checks each.
+  - Tokens are encrypted for your Windows user and stored in `%LOCALAPPDATA%\TaskOrganizer\credentials.json`, never in the database or the repository, and never shown again.
+- **Slack.** React to a message with :mag_right: and run `/slack-capture` in Claude Code from this repository. Each reacted message becomes one task linked to the message. Run interactively, it also suggests requests from recent DMs and mentions for you to pick from. It also runs by itself every hour from 04:00 to 18:00 on weekdays, on Haiku (Windows Task Scheduler, "TaskOrganizer Slack capture"), logging to `%LOCALAPPDATA%\TaskOrganizer\slack-capture.log`. See `.claude/skills/slack-capture/SKILL.md`.
+  - The skill adds tasks through `POST /api/external-tasks` on the running app, using the key the app writes to `%LOCALAPPDATA%\TaskOrganizer\local-api-key.txt` at startup. Web pages cannot call it.
 
 ## Changing the schema
 

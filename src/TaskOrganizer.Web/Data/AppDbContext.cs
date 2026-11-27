@@ -12,12 +12,14 @@ public class AppDbContext : DbContext
     }
 
     public const int HoldReasonMaxLength = 200;
+    public const int ExternalUrlMaxLength = 2000;
 
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<WorkTask> Tasks => Set<WorkTask>();
     public DbSet<TaskStatusChange> TaskStatusChanges => Set<TaskStatusChange>();
     public DbSet<TaskFieldChange> TaskFieldChanges => Set<TaskFieldChange>();
     public DbSet<HoldReasonSuggestion> HoldReasonSuggestions => Set<HoldReasonSuggestion>();
+    public DbSet<JiraProjectMapping> JiraProjectMappings => Set<JiraProjectMapping>();
     public DbSet<DayPlan> DayPlans => Set<DayPlan>();
     public DbSet<DayPlanFocusProject> DayPlanFocusProjects => Set<DayPlanFocusProject>();
     public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
@@ -36,6 +38,7 @@ public class AppDbContext : DbContext
             entity.ToTable("Tasks");
             entity.Property(t => t.Title).HasMaxLength(1000);
             entity.Property(t => t.HoldReason).HasMaxLength(HoldReasonMaxLength);
+            entity.Property(t => t.ExternalUrl).HasMaxLength(ExternalUrlMaxLength);
             // Enums are stored as text so the table can be read and queried by hand.
             entity.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
             entity.Property(t => t.Status).HasConversion<string>().HasMaxLength(20);
@@ -71,6 +74,13 @@ public class AppDbContext : DbContext
                 new HoldReasonSuggestion { Id = 3, Text = "AWAITING FEEDBACK" });
         });
 
+        modelBuilder.Entity<JiraProjectMapping>(entity =>
+        {
+            entity.Property(m => m.Prefix).HasMaxLength(20).UseCollation("NOCASE");
+            entity.HasIndex(m => m.Prefix).IsUnique();
+            entity.HasOne(m => m.Project).WithMany().HasForeignKey(m => m.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<DayPlan>(entity =>
         {
             entity.HasIndex(p => p.Date);
@@ -91,6 +101,11 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<AppSettings>(entity =>
         {
+            entity.Property(x => x.JiraSiteUrl).HasMaxLength(ExternalUrlMaxLength);
+            entity.Property(x => x.JiraEmail).HasMaxLength(320);
+            entity.Property(x => x.AzureDevOpsOrganizationUrl).HasMaxLength(ExternalUrlMaxLength);
+            entity.Property(x => x.AzureDevOpsProject).HasMaxLength(200);
+            entity.Property(x => x.PullRequestDefaultPriority).HasConversion<string>().HasMaxLength(20);
             entity.Property(s => s.Id).ValueGeneratedNever();
             entity.HasData(new AppSettings());
         });

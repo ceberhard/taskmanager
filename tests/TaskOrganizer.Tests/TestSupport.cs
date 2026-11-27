@@ -1,5 +1,8 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using TaskOrganizer.Web.Integrations;
 using TaskOrganizer.Web.Data;
 using TaskOrganizer.Web.Services;
 
@@ -55,6 +58,13 @@ public sealed class TestHost : IDisposable
         TimeImporter = new TimeLogImporter(Db, TimeLog);
         Suggestions = new DaySuggestionService(Db, Clock, Settings, Tasks);
         HoldReasons = new HoldReasonService(Db);
+
+        // Integrations: fake servers and a throwaway credential folder, never the real ones.
+        CredentialFolder = Path.Combine(Path.GetTempPath(), "taskorganizer-credentials-" + Guid.NewGuid().ToString("N"));
+        Credentials = new CredentialStore(new EphemeralDataProtectionProvider(), Options.Create(new CredentialOptions { Folder = CredentialFolder }));
+        Integrations = new IntegrationSettingsService(Db, Settings, Credentials);
+        External = new ExternalTaskService(Db, Tasks);
+        References = new ReferenceImportService(External, Integrations, Settings, new JiraClient(new HttpClient(JiraServer)), new AzureDevOpsClient(new HttpClient(AzureDevOpsServer)), Microsoft.Extensions.Logging.Abstractions.NullLogger<ReferenceImportService>.Instance);
     }
 
     public FakeTimeProvider Time { get; }
@@ -68,6 +78,20 @@ public sealed class TestHost : IDisposable
     public TimeLogImporter TimeImporter { get; }
     public DaySuggestionService Suggestions { get; }
     public HoldReasonService HoldReasons { get; }
+    public FakeHttpHandler JiraServer { get; } = new();
+    public FakeHttpHandler AzureDevOpsServer { get; } = new();
+    public string CredentialFolder { get; }
+    public CredentialStore Credentials { get; }
+    public IntegrationSettingsService Integrations { get; }
+    public ExternalTaskService External { get; }
+    public ReferenceImportService References { get; }
+
+    /// <summary>Sets up both integrations as a person would in Settings, against the fake servers.</summary>
+    public async Task ConnectIntegrationsAsync()
+    {
+        await Integrations.SaveJiraAsync("https://example.atlassian.net", "someone@example.com", "fake-jira-token");
+        await Integrations.SaveAzureDevOpsAsync("https://dev.azure.com/example-org", null, "fake-ado-token");
+    }
 
     /// <summary>A second context on the same database, to read what was actually saved.</summary>
     public AppDbContext NewContext()
@@ -80,5 +104,9 @@ public sealed class TestHost : IDisposable
     {
         Db.Dispose();
         _connection.Dispose();
+        if (Directory.Exists(CredentialFolder))
+        {
+            Directory.Delete(CredentialFolder, recursive: true);
+        }
     }
 }
